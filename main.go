@@ -50,6 +50,13 @@ func main() {
 		})
 	})
 
+	// 处方详情页面
+	r.GET("/prescription/:id", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "prescription_detail.html", gin.H{
+			"title": "处方详情",
+		})
+	})
+
 	// API路由组
 	api := r.Group("/api")
 	{
@@ -128,6 +135,19 @@ func main() {
 				printController := &controllers.PrintController{}
 				print.GET("/prescription/:id", printController.PrintPrescription)
 				print.GET("/appointment/:id", printController.PrintAppointment)
+			}
+
+			// 医生管理（仅管理员）
+			doctors := authorized.Group("/doctors")
+			doctors.Use(middleware.RoleRequired("admin"))
+			{
+				doctorController := &controllers.DoctorController{}
+				doctors.GET("", doctorController.List)
+				doctors.GET("/:id", doctorController.Get)
+				doctors.POST("", doctorController.Create)
+				doctors.PUT("/:id", doctorController.Update)
+				doctors.DELETE("/:id", doctorController.Delete)
+				doctors.POST("/:id/reset-password", doctorController.ResetPassword)
 			}
 		}
 	}

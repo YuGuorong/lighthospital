@@ -1,13 +1,14 @@
 package controllers
 
 import (
-	"net/http"
-	"time"
-	"golang.org/x/crypto/bcrypt"
-	"github.com/gin-gonic/gin"
-	"github.com/gin-contrib/sessions"
 	"lighthospital/database"
 	"lighthospital/models"
+	"net/http"
+	"time"
+
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthController struct{}
@@ -25,7 +26,7 @@ func (ac *AuthController) Login(c *gin.Context) {
 		SELECT id, username, password, name, role, created_at, updated_at 
 		FROM users WHERE username = ?`, loginReq.Username).Scan(
 		&user.ID, &user.Username, &user.Password, &user.Name, &user.Role, &user.CreatedAt, &user.UpdatedAt)
-	
+
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
@@ -60,7 +61,7 @@ func (ac *AuthController) Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
 	session.Save()
-	
+
 	c.JSON(http.StatusOK, gin.H{"message": "退出成功"})
 }
 
@@ -122,7 +123,7 @@ func (ac *AuthController) ChangePassword(c *gin.Context) {
 	}
 
 	// 更新密码
-	_, err = database.DB.Exec("UPDATE users SET password = ?, updated_at = ? WHERE id = ?", 
+	_, err = database.DB.Exec("UPDATE users SET password = ?, updated_at = ? WHERE id = ?",
 		string(hashedPassword), time.Now(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码更新失败"})
@@ -130,4 +131,4 @@ func (ac *AuthController) ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
-} 
+}

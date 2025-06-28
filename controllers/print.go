@@ -22,12 +22,12 @@ func (pc *PrintController) PrintPrescription(c *gin.Context) {
 	// 查询处方信息
 	var prescription models.Prescription
 	err = database.DB.QueryRow(`
-		SELECT p.id, p.patient_id, p.doctor_id, p.diagnosis, p.total_amount, p.status, p.notes, p.created_at, p.updated_at,
+		SELECT p.id, p.patient_id, p.doctor_id, p.diagnosis, p.doctor_advice, p.total_amount, p.status, p.notes, p.created_at, p.updated_at,
 		       u.name as doctor_name
 		FROM prescriptions p
 		LEFT JOIN users u ON p.doctor_id = u.id
 		WHERE p.id = ?`, id).Scan(
-		&prescription.ID, &prescription.PatientID, &prescription.DoctorID, &prescription.Diagnosis,
+		&prescription.ID, &prescription.PatientID, &prescription.DoctorID, &prescription.Diagnosis, &prescription.DoctorAdvice,
 		&prescription.TotalAmount, &prescription.Status, &prescription.Notes, &prescription.CreatedAt, &prescription.UpdatedAt,
 		&prescription.Doctor.Name)
 
@@ -120,6 +120,17 @@ func generatePrescriptionPDF(prescription models.Prescription, patient models.Pa
 	pdf.SetFont("Arial", "", 10)
 	pdf.Cell(0, 6, prescription.Diagnosis)
 	pdf.Ln(10)
+
+	// 医嘱信息
+	if prescription.DoctorAdvice != "" {
+		pdf.SetFont("Arial", "B", 12)
+		pdf.Cell(0, 8, "医嘱")
+		pdf.Ln(10)
+
+		pdf.SetFont("Arial", "", 10)
+		pdf.Cell(0, 6, prescription.DoctorAdvice)
+		pdf.Ln(10)
+	}
 
 	// 药品明细
 	pdf.SetFont("Arial", "B", 12)

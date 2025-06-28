@@ -83,6 +83,7 @@ func (pc *PrescriptionController) Get(c *gin.Context) {
 
 	// 查询处方基本信息
 	var prescription models.Prescription
+	var doctorName string
 	err = database.DB.QueryRow(`
 		SELECT p.id, p.patient_id, p.doctor_id, p.diagnosis, p.doctor_advice, p.total_amount, p.status, p.notes, p.created_at, p.updated_at,
 		       u.name as doctor_name
@@ -91,11 +92,24 @@ func (pc *PrescriptionController) Get(c *gin.Context) {
 		WHERE p.id = ?`, id).Scan(
 		&prescription.ID, &prescription.PatientID, &prescription.DoctorID, &prescription.Diagnosis, &prescription.DoctorAdvice,
 		&prescription.TotalAmount, &prescription.Status, &prescription.Notes, &prescription.CreatedAt, &prescription.UpdatedAt,
-		&prescription.Doctor.Name)
+		&doctorName)
 
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "处方不存在"})
 		return
+	}
+
+	// 初始化医生信息
+	if doctorName != "" {
+		prescription.Doctor = &models.User{
+			ID:   prescription.DoctorID,
+			Name: doctorName,
+		}
+	} else {
+		prescription.Doctor = &models.User{
+			ID:   prescription.DoctorID,
+			Name: "未知医生",
+		}
 	}
 
 	// 查询患者信息
@@ -106,9 +120,14 @@ func (pc *PrescriptionController) Get(c *gin.Context) {
 		&patient.ID, &patient.Name, &patient.Gender, &patient.Age, &patient.Phone,
 		&patient.Address, &patient.IDCard, &patient.MedicalHistory, &patient.CreatedAt, &patient.UpdatedAt)
 
-	if err == nil {
-		prescription.Patient = &patient
+	if err != nil {
+		// 如果患者不存在，创建一个空的患者信息
+		patient = models.Patient{
+			ID:   prescription.PatientID,
+			Name: "未知患者",
+		}
 	}
+	prescription.Patient = &patient
 
 	// 查询处方明细
 	rows, err := database.DB.Query(`

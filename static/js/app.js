@@ -50,6 +50,7 @@ function showMainApp() {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
     document.getElementById('userInfo').textContent = `${currentUser.name} (${currentUser.role})`;
+    showDoctorMenuIfAdmin();
 }
 
 // 绑定事件
@@ -149,7 +150,8 @@ function loadPage(page) {
         medicines: '药品管理',
         prescriptions: '处方管理',
         appointments: '预约管理',
-        reports: '统计报表'
+        reports: '统计报表',
+        doctors: '医生管理'
     };
     document.getElementById('pageTitle').textContent = titles[page] || '页面';
     
@@ -172,6 +174,9 @@ function loadPage(page) {
             break;
         case 'reports':
             loadReports();
+            break;
+        case 'doctors':
+            loadDoctors();
             break;
     }
 }
@@ -407,7 +412,7 @@ async function loadPrescriptions() {
 function displayPrescriptions(prescriptions) {
     const tbody = document.getElementById('prescriptionsTable');
     const html = prescriptions.map(prescription => `
-        <tr>
+        <tr style="cursor: pointer;" onclick="viewPrescription(${prescription.id})" title="点击查看详情">
             <td>${prescription.id}</td>
             <td>${prescription.patient.name}</td>
             <td>${prescription.doctor.name}</td>
@@ -421,13 +426,13 @@ function displayPrescriptions(prescriptions) {
             </td>
             <td>${new Date(prescription.created_at).toLocaleDateString()}</td>
             <td>
-                <button class="btn btn-sm btn-outline-primary" onclick="viewPrescription(${prescription.id})">
+                <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); viewPrescription(${prescription.id})">
                     <i class="bi bi-eye"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-success" onclick="printPrescription(${prescription.id})">
+                <button class="btn btn-sm btn-outline-success" onclick="event.stopPropagation(); printPrescription(${prescription.id})">
                     <i class="bi bi-printer"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deletePrescription(${prescription.id})">
+                <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); deletePrescription(${prescription.id})">
                     <i class="bi bi-trash"></i>
                 </button>
             </td>
@@ -966,8 +971,108 @@ async function deleteMedicine(id) {
 }
 
 function viewPrescription(id) {
-    // 这里可以实现查看处方详情的功能
-    alert('查看处方详情功能待实现');
+    loadPrescriptionDetail(id);
+    const modal = new bootstrap.Modal(document.getElementById('prescriptionDetailModal'));
+    modal.show();
+}
+
+async function loadPrescriptionDetail(prescriptionId) {
+    const content = document.getElementById('prescriptionDetailContent');
+    content.innerHTML = '<div class="text-center text-muted">加载中...</div>';
+    try {
+        const response = await fetch(`/api/prescriptions/${prescriptionId}`, { credentials: 'include' });
+        if (response.status === 401) {
+            content.innerHTML = '<div class="text-danger">请先登录系统</div>';
+            return;
+        }
+        if (response.ok) {
+            const data = await response.json();
+            const prescription = data.prescription;
+            content.innerHTML = renderPrescriptionDetailHtml(prescription);
+            document.getElementById('printPrescriptionBtn').onclick = function() {
+                window.open(`/api/print/prescription/${prescriptionId}`, '_blank');
+            };
+        } else {
+            content.innerHTML = '<div class="text-danger">加载处方详情失败</div>';
+        }
+    } catch (error) {
+        content.innerHTML = '<div class="text-danger">加载处方详情失败，请检查网络连接</div>';
+    }
+}
+
+function renderPrescriptionDetailHtml(prescription) {
+    // 生成HTML字符串，结构与 prescription_detail.html 类似
+    let patient = prescription.patient || {};
+    let doctor = prescription.doctor || {};
+    let items = prescription.items || [];
+    return `
+    <div>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <strong>患者：</strong> ${patient.name || '-'}
+                <span class="ms-3">性别：${patient.gender || '-'}</span>
+                <span class="ms-3">年龄：${patient.age ? patient.age + '岁' : '-'}</span>
+            </div>
+            <div class="col-md-6">
+                <strong>电话：</strong> ${patient.phone || '-'}
+                <span class="ms-3">身份证：${patient.id_card || '-'}</span>
+            </div>
+        </div>
+        <div class="mb-3"><strong>地址：</strong> ${patient.address || '-'}</div>
+        <div class="mb-3"><strong>诊断：</strong> ${prescription.diagnosis || '-'}</div>
+        <div class="mb-3"><strong>医嘱：</strong> ${prescription.doctor_advice || '-'}</div>
+        <div class="mb-3"><strong>备注：</strong> ${prescription.notes || '-'}</div>
+        <div class="mb-3">
+            <strong>药品明细：</strong>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead>
+                        <tr>
+                            <th>药品名称</th>
+                            <th>规格</th>
+                            <th>用法</th>
+                            <th>频次</th>
+                            <th>天数</th>
+                            <th>数量</th>
+                            <th>单价</th>
+                            <th>金额</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.length === 0 ? '<tr><td colspan="8" class="text-center text-muted">暂无药品明细</td></tr>' :
+                            items.map(item => `
+                                <tr>
+                                    <td>${item.medicine_name}</td>
+                                    <td>${item.specification}</td>
+                                    <td>${item.usage || '-'}</td>
+                                    <td>${item.frequency || '-'}</td>
+                                    <td>${item.days}</td>
+                                    <td>${item.quantity}</td>
+                                    <td>¥${item.unit_price ? item.unit_price.toFixed(2) : '0.00'}</td>
+                                    <td>¥${item.total_price ? item.total_price.toFixed(2) : '0.00'}</td>
+                                </tr>
+                            `).join('')
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-md-6">
+                <strong>开方医生：</strong> ${doctor.name || '-'}
+            </div>
+            <div class="col-md-6 text-end">
+                <strong>开方日期：</strong> ${prescription.created_at ? new Date(prescription.created_at).toLocaleDateString() : '-'}
+            </div>
+        </div>
+        <div class="mb-2 text-end">
+            <strong>总计：</strong> <span class="text-primary">¥${prescription.total_amount ? prescription.total_amount.toFixed(2) : '0.00'}</span>
+        </div>
+        <div class="mb-2">
+            <span class="badge bg-secondary">${getStatusText(prescription.status)}</span>
+        </div>
+    </div>
+    `;
 }
 
 async function printPrescription(id) {
@@ -1031,6 +1136,7 @@ async function deleteAppointment(id) {
 // 快速查找或创建患者
 async function findOrCreatePatient() {
     const patientName = document.getElementById('prescriptionPatientName').value.trim();
+    const patientGender = document.getElementById('prescriptionPatientGender').value;
     if (!patientName) {
         alert('请输入患者姓名');
         return;
@@ -1044,7 +1150,7 @@ async function findOrCreatePatient() {
             },
             body: JSON.stringify({
                 name: patientName,
-                gender: '',
+                gender: patientGender,
                 age: 0,
                 phone: ''
             }),
@@ -1063,6 +1169,11 @@ async function findOrCreatePatient() {
             option.textContent = `${patient.name} (${patient.gender || '未知'}, ${patient.age || '未知'}岁)`;
             select.appendChild(option);
             select.value = patient.id;
+            
+            // 如果患者有性别信息，更新性别选择框
+            if (patient.gender) {
+                document.getElementById('prescriptionPatientGender').value = patient.gender;
+            }
             
             // 清空输入框
             document.getElementById('prescriptionPatientName').value = '';
@@ -1293,4 +1404,158 @@ function showQuickMedicineModal() {
     const form = document.getElementById('quickMedicineForm');
     form.reset();
     modal.show();
+}
+
+// 显示医生管理菜单（仅管理员）
+function showDoctorMenuIfAdmin() {
+    if (currentUser && currentUser.role === 'admin') {
+        document.getElementById('doctorManageMenu').style.display = '';
+    }
+}
+
+// 加载医生列表
+async function loadDoctors() {
+    try {
+        const response = await fetch('/api/doctors', { credentials: 'include' });
+        if (response.ok) {
+            const data = await response.json();
+            displayDoctors(data.doctors);
+        }
+    } catch (error) {
+        console.error('加载医生列表失败:', error);
+    }
+}
+
+function displayDoctors(doctors) {
+    const tbody = document.getElementById('doctorsTable');
+    tbody.innerHTML = doctors.map(doctor => `
+        <tr>
+            <td>${doctor.id}</td>
+            <td>${doctor.username}</td>
+            <td>${doctor.name}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="editDoctor(${doctor.id})"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteDoctor(${doctor.id})"><i class="bi bi-trash"></i></button>
+                <button class="btn btn-sm btn-outline-warning" onclick="resetDoctorPassword(${doctor.id})"><i class="bi bi-key"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function showDoctorModal(id = null) {
+    const modal = new bootstrap.Modal(document.getElementById('doctorModal'));
+    const title = document.getElementById('doctorModalTitle');
+    const form = document.getElementById('doctorForm');
+    const passwordGroup = document.getElementById('doctorPasswordGroup');
+    const passwordInput = document.getElementById('doctorPassword');
+    const passwordHint = document.getElementById('doctorPasswordHint');
+    if (id) {
+        title.textContent = '编辑医生';
+        form.reset();
+        document.getElementById('doctorId').value = id;
+        passwordGroup.style.display = '';
+        passwordInput.required = false;
+        passwordInput.value = '';
+        passwordInput.placeholder = '如需修改请填写新密码';
+        passwordHint.textContent = '编辑时留空表示不修改密码';
+        loadDoctorData(id);
+    } else {
+        title.textContent = '添加医生';
+        form.reset();
+        document.getElementById('doctorId').value = '';
+        passwordGroup.style.display = '';
+        passwordInput.required = true;
+        passwordInput.value = '';
+        passwordInput.placeholder = '请输入密码';
+        passwordHint.textContent = '添加医生时必填';
+    }
+    modal.show();
+}
+
+async function loadDoctorData(id) {
+    try {
+        const response = await fetch(`/api/doctors/${id}`, { credentials: 'include' });
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('doctorId').value = data.doctor.id;
+            document.getElementById('doctorUsername').value = data.doctor.username;
+            document.getElementById('doctorName').value = data.doctor.name;
+        }
+    } catch (error) {
+        alert('加载医生信息失败');
+    }
+}
+
+async function saveDoctor() {
+    const id = document.getElementById('doctorId').value;
+    const username = document.getElementById('doctorUsername').value;
+    const name = document.getElementById('doctorName').value;
+    const password = document.getElementById('doctorPassword').value;
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/api/doctors/${id}` : '/api/doctors';
+    let body = { username, name };
+    if (!id || password) body.password = password;
+    if (!username || !name || (!id && !password)) {
+        alert('请填写完整信息');
+        return;
+    }
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'include'
+        });
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('doctorModal')).hide();
+            loadDoctors();
+            alert(id ? '医生信息更新成功' : '医生添加成功');
+        } else {
+            const error = await response.json();
+            alert(error.error || '操作失败');
+        }
+    } catch (error) {
+        alert('操作失败，请检查网络连接');
+    }
+}
+
+async function deleteDoctor(id) {
+    if (!confirm('确定要删除这个医生账号吗？')) return;
+    try {
+        const response = await fetch(`/api/doctors/${id}`, { method: 'DELETE', credentials: 'include' });
+        if (response.ok) {
+            loadDoctors();
+            alert('医生账号删除成功');
+        } else {
+            const error = await response.json();
+            alert(error.error || '删除失败');
+        }
+    } catch (error) {
+        alert('删除失败，请检查网络连接');
+    }
+}
+
+async function resetDoctorPassword(id) {
+    const newPassword = prompt('请输入新密码：');
+    if (!newPassword) return;
+    try {
+        const response = await fetch(`/api/doctors/${id}/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: newPassword }),
+            credentials: 'include'
+        });
+        if (response.ok) {
+            alert('密码重置成功');
+        } else {
+            const error = await response.json();
+            alert(error.error || '重置失败');
+        }
+    } catch (error) {
+        alert('重置失败，请检查网络连接');
+    }
+}
+
+function editDoctor(id) {
+    showDoctorModal(id);
 } 

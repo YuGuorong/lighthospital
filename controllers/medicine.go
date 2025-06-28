@@ -1,12 +1,13 @@
 package controllers
 
 import (
+	"lighthospital/database"
+	"lighthospital/models"
 	"net/http"
 	"strconv"
 	"time"
+
 	"github.com/gin-gonic/gin"
-	"lighthospital/database"
-	"lighthospital/models"
 )
 
 type MedicineController struct{}
@@ -24,7 +25,7 @@ func (mc *MedicineController) Create(c *gin.Context) {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		medicine.Name, medicine.Specification, medicine.Unit, medicine.Price, medicine.Stock,
 		medicine.MinStock, medicine.Category, medicine.Manufacturer, now, now)
-	
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建药品失败"})
 		return
@@ -50,7 +51,7 @@ func (mc *MedicineController) Get(c *gin.Context) {
 		FROM medicines WHERE id = ?`, id).Scan(
 		&medicine.ID, &medicine.Name, &medicine.Specification, &medicine.Unit, &medicine.Price,
 		&medicine.Stock, &medicine.MinStock, &medicine.Category, &medicine.Manufacturer, &medicine.CreatedAt, &medicine.UpdatedAt)
-	
+
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "药品不存在"})
 		return
@@ -77,7 +78,7 @@ func (mc *MedicineController) Update(c *gin.Context) {
 		min_stock = ?, category = ?, manufacturer = ?, updated_at = ? WHERE id = ?`,
 		medicine.Name, medicine.Specification, medicine.Unit, medicine.Price, medicine.Stock,
 		medicine.MinStock, medicine.Category, medicine.Manufacturer, time.Now(), id)
-	
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新药品失败"})
 		return
@@ -225,7 +226,7 @@ func (mc *MedicineController) UpdateStock(c *gin.Context) {
 		return
 	}
 
-	_, err = database.DB.Exec("UPDATE medicines SET stock = ?, updated_at = ? WHERE id = ?", 
+	_, err = database.DB.Exec("UPDATE medicines SET stock = ?, updated_at = ? WHERE id = ?",
 		req.Stock, time.Now(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新库存失败"})
@@ -278,4 +279,4 @@ func (mc *MedicineController) GetLowStock(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"medicines": medicines})
-} 
+}
