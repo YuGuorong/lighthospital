@@ -93,6 +93,9 @@
 </head>
 <body>
     <div class="container">
+        <div class="d-flex justify-content-end mt-3">
+            <button class="btn btn-print" onclick="window.print()"><i class="bi bi-printer"></i> 打印</button>
+        </div>
         <div class="prescription-card">
             <div class="prescription-header">
                 <div class="row align-items-center">
@@ -220,20 +223,44 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // 获取处方ID
-        const prescriptionId = window.location.pathname.split('/').pop();
+        // 获取处方ID - 修复获取方式
+        function getPrescriptionId() {
+            const pathParts = window.location.pathname.split('/');
+            const id = pathParts[pathParts.length - 1];
+            console.log('处方ID:', id); // 调试信息
+            return id;
+        }
+        
+        const prescriptionId = getPrescriptionId();
         
         // 页面加载时获取处方详情
         document.addEventListener('DOMContentLoaded', function() {
+            if (!prescriptionId || prescriptionId === 'prescription_detail.html') {
+                alert('无效的处方ID');
+                window.location.href = '/';
+                return;
+            }
             loadPrescriptionDetail();
         });
 
         // 加载处方详情
         async function loadPrescriptionDetail() {
             try {
+                console.log('正在加载处方详情，ID:', prescriptionId); // 调试信息
+                
+                // 显示加载状态
+                document.getElementById('patientName').textContent = '加载中...';
+                
                 const response = await fetch(`/api/prescriptions/${prescriptionId}`, {
-                    credentials: 'include' // 包含认证信息
+                    credentials: 'include', // 包含认证信息
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
                 });
+                
+                console.log('API响应状态:', response.status); // 调试信息
+                console.log('API响应头:', response.headers); // 调试信息
                 
                 if (response.status === 401) {
                     alert('请先登录系统');
@@ -241,18 +268,38 @@
                     return;
                 }
                 
+                if (response.status === 404) {
+                    alert('处方不存在');
+                    window.location.href = '/';
+                    return;
+                }
+                
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('API响应数据:', data); // 调试信息
                     const prescription = data.prescription;
+                    
+                    if (!prescription) {
+                        alert('处方数据格式错误');
+                        return;
+                    }
                     
                     // 填充患者信息
                     if (prescription.patient) {
-                        document.getElementById('patientName').textContent = prescription.patient.name;
-                        document.getElementById('patientGender').textContent = prescription.patient.gender;
-                        document.getElementById('patientAge').textContent = prescription.patient.age + '岁';
+                        document.getElementById('patientName').textContent = prescription.patient.name || '-';
+                        document.getElementById('patientGender').textContent = prescription.patient.gender || '-';
+                        document.getElementById('patientAge').textContent = (prescription.patient.age ? prescription.patient.age + '岁' : '-');
                         document.getElementById('patientPhone').textContent = prescription.patient.phone || '-';
                         document.getElementById('patientIdCard').textContent = prescription.patient.id_card || '-';
                         document.getElementById('patientAddress').textContent = prescription.patient.address || '-';
+                    } else {
+                        // 如果患者信息为空，显示默认值
+                        document.getElementById('patientName').textContent = '-';
+                        document.getElementById('patientGender').textContent = '-';
+                        document.getElementById('patientAge').textContent = '-';
+                        document.getElementById('patientPhone').textContent = '-';
+                        document.getElementById('patientIdCard').textContent = '-';
+                        document.getElementById('patientAddress').textContent = '-';
                     }
                     
                     // 填充诊断信息
@@ -262,16 +309,22 @@
                     
                     // 填充医生信息
                     if (prescription.doctor) {
-                        document.getElementById('doctorName').textContent = prescription.doctor.name;
+                        document.getElementById('doctorName').textContent = prescription.doctor.name || '-';
+                    } else {
+                        document.getElementById('doctorName').textContent = '-';
                     }
                     
                     // 填充日期和状态
-                    document.getElementById('createdAt').textContent = new Date(prescription.created_at).toLocaleDateString();
+                    if (prescription.created_at) {
+                        document.getElementById('createdAt').textContent = new Date(prescription.created_at).toLocaleDateString();
+                    } else {
+                        document.getElementById('createdAt').textContent = '-';
+                    }
                     document.getElementById('prescriptionStatus').textContent = getStatusText(prescription.status);
-                    document.getElementById('totalAmount').textContent = prescription.total_amount.toFixed(2);
+                    document.getElementById('totalAmount').textContent = (prescription.total_amount ? prescription.total_amount.toFixed(2) : '0.00');
                     
                     // 填充药品明细
-                    displayMedicineItems(prescription.items);
+                    displayMedicineItems(prescription.items || []);
                     
                 } else {
                     const errorData = await response.json().catch(() => ({}));
@@ -287,23 +340,40 @@
         // 显示药品明细
         function displayMedicineItems(items) {
             const tbody = document.getElementById('medicineItems');
+            if (!tbody) {
+                console.error('找不到药品明细表格体');
+                return;
+            }
+            
             if (!items || items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">暂无药品明细</td></tr>';
                 return;
             }
             
-            const html = items.map(item => `
-                <tr>
-                    <td>${item.medicine_name}</td>
-                    <td>${item.specification}</td>
-                    <td>${item.usage || '-'}</td>
-                    <td>${item.frequency || '-'}</td>
-                    <td>${item.days}</td>
-                    <td>${item.quantity}</td>
-                    <td>¥${item.unit_price.toFixed(2)}</td>
-                    <td>¥${item.total_price.toFixed(2)}</td>
-                </tr>
-            `).join('');
+            const html = items.map(item => {
+                // 确保所有字段都有默认值
+                const medicineName = item.medicine_name || '-';
+                const specification = item.specification || '-';
+                const usage = item.usage || '-';
+                const frequency = item.frequency || '-';
+                const days = item.days || 0;
+                const quantity = item.quantity || 0;
+                const unitPrice = item.unit_price || 0;
+                const totalPrice = item.total_price || 0;
+                
+                return `
+                    <tr>
+                        <td>${medicineName}</td>
+                        <td>${specification}</td>
+                        <td>${usage}</td>
+                        <td>${frequency}</td>
+                        <td>${days}</td>
+                        <td>${quantity}</td>
+                        <td>¥${unitPrice.toFixed(2)}</td>
+                        <td>¥${totalPrice.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
             
             tbody.innerHTML = html;
         }

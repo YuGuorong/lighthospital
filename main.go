@@ -150,6 +150,13 @@ func main() {
 				doctors.DELETE("/:id", doctorController.Delete)
 				doctors.POST("/:id/reset-password", doctorController.ResetPassword)
 			}
+
+			// 统计信息
+			stats := authorized.Group("/stats")
+			{
+				statsController := controllers.NewStatsController(database.GetDB())
+				stats.GET("", statsController.GetStats)
+			}
 		}
 	}
 

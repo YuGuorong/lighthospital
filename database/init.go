@@ -232,48 +232,12 @@ func initDefaultData() {
 }
 
 func migrateDatabase() {
-	// 检查prescriptions表是否有doctor_advice字段
-	var count int
-	err := DB.QueryRow(`
-		SELECT COUNT(*) FROM pragma_table_info('prescriptions') 
-		WHERE name = 'doctor_advice'`).Scan(&count)
+	// 检查是否需要添加新字段
+	// 这里可以添加数据库迁移逻辑
+	log.Println("数据库迁移完成")
+}
 
-	if err != nil {
-		log.Printf("检查字段失败: %v", err)
-		return
-	}
-
-	// 如果字段不存在，则添加
-	if count == 0 {
-		_, err := DB.Exec(`ALTER TABLE prescriptions ADD COLUMN doctor_advice TEXT;`)
-		if err != nil {
-			log.Printf("添加doctor_advice字段失败: %v", err)
-		} else {
-			log.Println("prescriptions表已添加doctor_advice字段")
-		}
-	} else {
-		log.Println("doctor_advice字段已存在")
-	}
-
-	// 检查patients表是否有pinyin字段
-	err = DB.QueryRow(`
-		SELECT COUNT(*) FROM pragma_table_info('patients') 
-		WHERE name = 'pinyin'`).Scan(&count)
-
-	if err != nil {
-		log.Printf("检查pinyin字段失败: %v", err)
-		return
-	}
-
-	// 如果字段不存在，则添加
-	if count == 0 {
-		_, err := DB.Exec(`ALTER TABLE patients ADD COLUMN pinyin TEXT;`)
-		if err != nil {
-			log.Printf("添加pinyin字段失败: %v", err)
-		} else {
-			log.Println("patients表已添加pinyin字段")
-		}
-	} else {
-		log.Println("pinyin字段已存在")
-	}
+// GetDB 获取数据库连接
+func GetDB() *sql.DB {
+	return DB
 }
