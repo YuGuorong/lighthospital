@@ -280,3 +280,49 @@ func (mc *MedicineController) GetLowStock(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"medicines": medicines})
 }
+
+// 药品自动完成搜索
+func (mc *MedicineController) AutoComplete(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusOK, gin.H{"medicines": []interface{}{}})
+		return
+	}
+
+	rows, err := database.DB.Query(`
+		SELECT id, name, specification, unit, price, stock
+		FROM medicines 
+		WHERE name LIKE ? OR specification LIKE ?
+		ORDER BY name ASC 
+		LIMIT 10`, "%"+query+"%", "%"+query+"%")
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "搜索药品失败"})
+		return
+	}
+	defer rows.Close()
+
+	var medicines []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var name, specification, unit string
+		var price float64
+		var stock int
+
+		err := rows.Scan(&id, &name, &specification, &unit, &price, &stock)
+		if err != nil {
+			continue
+		}
+
+		medicines = append(medicines, map[string]interface{}{
+			"id":            id,
+			"name":          name,
+			"specification": specification,
+			"unit":          unit,
+			"price":         price,
+			"stock":         stock,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"medicines": medicines})
+}

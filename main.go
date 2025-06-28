@@ -97,6 +97,7 @@ func main() {
 				medicines.DELETE("/:id", middleware.OperationLogger("删除", "药品"), medicineController.Delete)
 				medicines.GET("", medicineController.List)
 				medicines.POST("/search", medicineController.Search)
+				medicines.GET("/autocomplete", medicineController.AutoComplete)
 				medicines.PUT("/:id/stock", middleware.OperationLogger("更新库存", "药品"), medicineController.UpdateStock)
 				medicines.GET("/categories", medicineController.GetCategories)
 				medicines.GET("/low-stock", medicineController.GetLowStock)
