@@ -1,6 +1,6 @@
 // 全局变量
 let currentUser = null;
-let currentPage = 'dashboard';
+let currentPage = 'prescriptions';
 
 // API基础URL
 const API_BASE = '/api';
@@ -19,7 +19,7 @@ function initApp() {
     bindEvents();
     
     // 加载页面内容
-    loadPage('dashboard');
+    loadPage('prescriptions');
 }
 
 // 检查认证状态
@@ -102,7 +102,7 @@ async function handleLogin(e) {
             const data = await response.json();
             currentUser = data.user;
             showMainApp();
-            loadPage('dashboard');
+            loadPage('prescriptions');
         } else {
             const error = await response.json();
             alert(error.error || '登录失败');
@@ -145,7 +145,6 @@ function loadPage(page) {
     
     // 更新页面标题
     const titles = {
-        dashboard: '仪表板',
         patients: '患者管理',
         medicines: '药品管理',
         prescriptions: '处方管理',
@@ -157,9 +156,6 @@ function loadPage(page) {
     
     // 加载页面数据
     switch (page) {
-        case 'dashboard':
-            loadDashboard();
-            break;
         case 'patients':
             loadPatients();
             break;
@@ -181,102 +177,17 @@ function loadPage(page) {
     }
 }
 
-// 加载仪表板
-async function loadDashboard() {
-    try {
-        // 加载统计数据
-        const [patientsRes, medicinesRes, prescriptionsRes, appointmentsRes] = await Promise.all([
-            fetch(`${API_BASE}/patients?limit=1`),
-            fetch(`${API_BASE}/medicines?limit=1`),
-            fetch(`${API_BASE}/prescriptions?limit=1`),
-            fetch(`${API_BASE}/appointments/today`)
-        ]);
-        
-        if (patientsRes.ok) {
-            const data = await patientsRes.json();
-            document.getElementById('patientCount').textContent = data.total;
-        }
-        
-        if (medicinesRes.ok) {
-            const data = await medicinesRes.json();
-            document.getElementById('medicineCount').textContent = data.total;
-        }
-        
-        if (prescriptionsRes.ok) {
-            const data = await prescriptionsRes.json();
-            document.getElementById('prescriptionCount').textContent = data.total;
-        }
-        
-        if (appointmentsRes.ok) {
-            const data = await appointmentsRes.json();
-            document.getElementById('appointmentCount').textContent = data.appointments.length;
-            displayTodayAppointments(data.appointments);
-        }
-        
-        // 加载低库存药品
-        const lowStockRes = await fetch(`${API_BASE}/medicines/low-stock`);
-        if (lowStockRes.ok) {
-            const data = await lowStockRes.json();
-            displayLowStockMedicines(data.medicines);
-        }
-        
-    } catch (error) {
-        console.error('加载仪表板失败:', error);
-    }
-}
-
-// 显示今日预约
-function displayTodayAppointments(appointments) {
-    const container = document.getElementById('todayAppointments');
-    if (appointments.length === 0) {
-        container.innerHTML = '<p class="text-muted">今日无预约</p>';
-        return;
-    }
-    
-    const html = appointments.map(apt => `
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
-                <strong>${apt.patient.name}</strong>
-                <br><small class="text-muted">${apt.appointment_time}</small>
-            </div>
-            <span class="badge bg-primary">${apt.status}</span>
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
-}
-
-// 显示低库存药品
-function displayLowStockMedicines(medicines) {
-    const container = document.getElementById('lowStockMedicines');
-    if (medicines.length === 0) {
-        container.innerHTML = '<p class="text-muted">无低库存药品</p>';
-        return;
-    }
-    
-    const html = medicines.map(med => `
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
-                <strong>${med.name}</strong>
-                <br><small class="text-muted">库存: ${med.stock}</small>
-            </div>
-            <span class="badge bg-warning">低库存</span>
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
-}
-
 // 加载患者列表
-async function loadPatients() {
+async function loadPatients(page = 1) {
     try {
         const search = document.getElementById('patientSearch').value;
-        const url = search ? `${API_BASE}/patients?search=${encodeURIComponent(search)}` : `${API_BASE}/patients`;
+        const url = search ? `${API_BASE}/patients?search=${encodeURIComponent(search)}&page=${page}&limit=10` : `${API_BASE}/patients?page=${page}&limit=10`;
         
         const response = await fetch(url);
         if (response.ok) {
             const data = await response.json();
             displayPatients(data.patients);
+            displayPatientPagination(data.total, data.page, data.limit);
         }
     } catch (error) {
         console.error('加载患者列表失败:', error);
@@ -307,22 +218,86 @@ function displayPatients(patients) {
     tbody.innerHTML = html;
 }
 
+// 显示患者分页
+function displayPatientPagination(total, currentPage, limit) {
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        // 如果只有一页或没有数据，隐藏分页
+        const paginationContainer = document.getElementById('patientPagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+        return;
+    }
+    
+    let paginationHtml = `
+        <nav aria-label="患者分页">
+            <ul class="pagination justify-content-center">
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPatients(${currentPage - 1})" ${currentPage === 1 ? 'tabindex="-1"' : ''}>上一页</a>
+                </li>
+    `;
+    
+    // 显示页码
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPatients(1)">1</a></li>`;
+        if (startPage > 2) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadPatients(${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPatients(${totalPages})">${totalPages}</a></li>`;
+    }
+    
+    paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPatients(${currentPage + 1})" ${currentPage === totalPages ? 'tabindex="-1"' : ''}>下一页</a>
+                </li>
+            </ul>
+        </nav>
+        <div class="text-center text-muted">
+            共 ${total} 条记录，第 ${currentPage}/${totalPages} 页
+        </div>
+    `;
+    
+    const paginationContainer = document.getElementById('patientPagination');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = paginationHtml;
+    }
+}
+
 // 加载药品列表
-async function loadMedicines() {
+async function loadMedicines(page = 1) {
     try {
         const search = document.getElementById('medicineSearch').value;
         const category = document.getElementById('medicineCategory').value;
         
-        let url = `${API_BASE}/medicines`;
+        let url = `${API_BASE}/medicines?page=${page}&limit=10`;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (category) params.append('category', category);
-        if (params.toString()) url += '?' + params.toString();
+        if (params.toString()) url += '&' + params.toString();
         
         const response = await fetch(url);
         if (response.ok) {
             const data = await response.json();
             displayMedicines(data.medicines);
+            displayMedicinePagination(data.total, data.page, data.limit);
         }
         
         // 加载药品分类
@@ -362,6 +337,69 @@ function displayMedicines(medicines) {
     tbody.innerHTML = html;
 }
 
+// 显示药品分页
+function displayMedicinePagination(total, currentPage, limit) {
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        // 如果只有一页或没有数据，隐藏分页
+        const paginationContainer = document.getElementById('medicinePagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+        return;
+    }
+    
+    let paginationHtml = `
+        <nav aria-label="药品分页">
+            <ul class="pagination justify-content-center">
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadMedicines(${currentPage - 1})" ${currentPage === 1 ? 'tabindex="-1"' : ''}>上一页</a>
+                </li>
+    `;
+    
+    // 显示页码
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadMedicines(1)">1</a></li>`;
+        if (startPage > 2) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadMedicines(${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadMedicines(${totalPages})">${totalPages}</a></li>`;
+    }
+    
+    paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadMedicines(${currentPage + 1})" ${currentPage === totalPages ? 'tabindex="-1"' : ''}>下一页</a>
+                </li>
+            </ul>
+        </nav>
+        <div class="text-center text-muted">
+            共 ${total} 条记录，第 ${currentPage}/${totalPages} 页
+        </div>
+    `;
+    
+    const paginationContainer = document.getElementById('medicinePagination');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = paginationHtml;
+    }
+}
+
 // 加载药品分类
 async function loadMedicineCategories() {
     try {
@@ -387,21 +425,22 @@ async function loadMedicineCategories() {
 }
 
 // 加载处方列表
-async function loadPrescriptions() {
+async function loadPrescriptions(page = 1) {
     try {
         const search = document.getElementById('prescriptionSearch').value;
         const status = document.getElementById('prescriptionStatus').value;
         
-        let url = `${API_BASE}/prescriptions`;
+        let url = `${API_BASE}/prescriptions?page=${page}&limit=10`;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (status) params.append('status', status);
-        if (params.toString()) url += '?' + params.toString();
+        if (params.toString()) url += '&' + params.toString();
         
         const response = await fetch(url);
         if (response.ok) {
             const data = await response.json();
             displayPrescriptions(data.prescriptions);
+            displayPrescriptionPagination(data.total, data.page, data.limit);
         }
     } catch (error) {
         console.error('加载处方列表失败:', error);
@@ -440,6 +479,69 @@ function displayPrescriptions(prescriptions) {
     `).join('');
     
     tbody.innerHTML = html;
+}
+
+// 显示处方分页
+function displayPrescriptionPagination(total, currentPage, limit) {
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        // 如果只有一页或没有数据，隐藏分页
+        const paginationContainer = document.getElementById('prescriptionPagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+        return;
+    }
+    
+    let paginationHtml = `
+        <nav aria-label="处方分页">
+            <ul class="pagination justify-content-center">
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPrescriptions(${currentPage - 1})" ${currentPage === 1 ? 'tabindex="-1"' : ''}>上一页</a>
+                </li>
+    `;
+    
+    // 显示页码
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPrescriptions(1)">1</a></li>`;
+        if (startPage > 2) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadPrescriptions(${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPrescriptions(${totalPages})">${totalPages}</a></li>`;
+    }
+    
+    paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPrescriptions(${currentPage + 1})" ${currentPage === totalPages ? 'tabindex="-1"' : ''}>下一页</a>
+                </li>
+            </ul>
+        </nav>
+        <div class="text-center text-muted">
+            共 ${total} 条记录，第 ${currentPage}/${totalPages} 页
+        </div>
+    `;
+    
+    const paginationContainer = document.getElementById('prescriptionPagination');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = paginationHtml;
+    }
 }
 
 // 加载预约列表
@@ -497,9 +599,279 @@ function displayAppointments(appointments) {
 }
 
 // 加载统计报表
-function loadReports() {
-    // 这里可以添加图表显示逻辑
-    console.log('加载统计报表');
+async function loadReports() {
+    try {
+        // 加载今日预约
+        const todayAppointmentsResponse = await fetch(`${API_BASE}/appointments/today`);
+        const todayAppointments = todayAppointmentsResponse.ok ? await todayAppointmentsResponse.json() : { appointments: [] };
+        
+        // 加载库存不足的药品
+        const lowStockResponse = await fetch(`${API_BASE}/medicines/low-stock`);
+        const lowStockMedicines = lowStockResponse.ok ? await lowStockResponse.json() : { medicines: [] };
+        
+        // 加载统计数据
+        const statsResponse = await fetch(`${API_BASE}/stats`);
+        const stats = statsResponse.ok ? await statsResponse.json() : { stats: {} };
+        
+        // 显示统计信息
+        displayReports(todayAppointments.appointments, lowStockMedicines.medicines, stats.stats);
+    } catch (error) {
+        console.error('加载统计报表失败:', error);
+    }
+}
+
+// 显示统计报表
+function displayReports(todayAppointments, lowStockMedicines, stats) {
+    const reportsPage = document.getElementById('reportsPage');
+    
+    reportsPage.innerHTML = `
+        <div class="row">
+            <!-- 统计卡片 -->
+            <div class="col-md-3 mb-4">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">总患者数</h6>
+                            <div class="stats-number">${stats.total_patients || 0}</div>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-people text-white-50" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">总药品数</h6>
+                            <div class="stats-number">${stats.total_medicines || 0}</div>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-capsule text-white-50" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">总处方数</h6>
+                            <div class="stats-number">${stats.total_prescriptions || 0}</div>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-file-text text-white-50" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="stats-card">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">今日预约</h6>
+                            <div class="stats-number">${todayAppointments.length}</div>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-calendar text-white-50" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- 今日预约 -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-calendar-check"></i> 今日预约
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        ${displayTodayAppointments(todayAppointments)}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 库存不足药品 -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-exclamation-triangle"></i> 库存不足药品
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        ${displayLowStockMedicines(lowStockMedicines)}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- 图表区域 -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-graph-up"></i> 处方统计
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="prescriptionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-pie-chart"></i> 药品分类统计
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="medicineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 初始化图表
+    setTimeout(() => {
+        initCharts(stats);
+    }, 100);
+}
+
+// 显示今日预约
+function displayTodayAppointments(appointments) {
+    if (appointments.length === 0) {
+        return '<div class="text-center text-muted">今日暂无预约</div>';
+    }
+    
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>患者</th>
+                        <th>时间</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${appointments.map(appointment => `
+                        <tr>
+                            <td>${appointment.patient.name}</td>
+                            <td>${new Date(appointment.appointment_time).toLocaleTimeString()}</td>
+                            <td>
+                                <span class="badge bg-${getAppointmentStatusBadgeColor(appointment.status)}">
+                                    ${getAppointmentStatusText(appointment.status)}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// 显示库存不足药品
+function displayLowStockMedicines(medicines) {
+    if (medicines.length === 0) {
+        return '<div class="text-center text-muted">暂无库存不足的药品</div>';
+    }
+    
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>药品名称</th>
+                        <th>当前库存</th>
+                        <th>最低库存</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${medicines.map(medicine => `
+                        <tr>
+                            <td>${medicine.name}</td>
+                            <td class="text-danger">${medicine.stock}</td>
+                            <td>${medicine.min_stock}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// 初始化图表
+function initCharts(stats) {
+    // 处方统计图表
+    const prescriptionCtx = document.getElementById('prescriptionChart');
+    if (prescriptionCtx) {
+        new Chart(prescriptionCtx, {
+            type: 'line',
+            data: {
+                labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                datasets: [{
+                    label: '处方数量',
+                    data: stats.prescription_weekly || [0, 0, 0, 0, 0, 0, 0],
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+    
+    // 药品分类统计图表
+    const medicineCtx = document.getElementById('medicineChart');
+    if (medicineCtx) {
+        new Chart(medicineCtx, {
+            type: 'doughnut',
+            data: {
+                labels: stats.medicine_categories?.map(cat => cat.name) || ['其他'],
+                datasets: [{
+                    data: stats.medicine_categories?.map(cat => cat.count) || [0],
+                    backgroundColor: [
+                        '#667eea',
+                        '#764ba2',
+                        '#f093fb',
+                        '#f5576c',
+                        '#4facfe',
+                        '#00f2fe'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
 }
 
 // 工具函数
@@ -606,7 +978,7 @@ function showPrescriptionModal(prescriptionId = null) {
         // 重置处方明细
         document.getElementById('prescriptionItems').innerHTML = `
             <div class="row prescription-item">
-                <div class="col-md-3 mb-2">
+                <div class="col-md-2 mb-2">
                     <div class="autocomplete-container">
                         <input type="text" class="form-control" placeholder="药品名称" name="medicineName" autocomplete="off">
                         <div class="autocomplete-dropdown" style="display: none;"></div>
@@ -615,7 +987,7 @@ function showPrescriptionModal(prescriptionId = null) {
                 <div class="col-md-2 mb-2">
                     <input type="text" class="form-control" placeholder="规格" name="specification">
                 </div>
-                <div class="col-md-1 mb-2">
+                <div class="col-md-2 mb-2">
                     <input type="text" class="form-control" placeholder="用法" name="usage">
                 </div>
                 <div class="col-md-1 mb-2">
@@ -629,6 +1001,9 @@ function showPrescriptionModal(prescriptionId = null) {
                 </div>
                 <div class="col-md-1 mb-2">
                     <input type="number" step="0.01" class="form-control" placeholder="单价" name="unitPrice">
+                </div>
+                <div class="col-md-1 mb-2">
+                    <input type="number" step="0.01" class="form-control" placeholder="价格" name="totalPrice" readonly>
                 </div>
                 <div class="col-md-1 mb-2">
                     <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionItem(this)">
@@ -649,6 +1024,11 @@ function showPrescriptionModal(prescriptionId = null) {
     setTimeout(() => {
         initMedicineAutocomplete();
         setupPatientAutocomplete();
+        // 为初始药品行绑定价格计算事件
+        const initialItem = document.querySelector('.prescription-item');
+        if (initialItem) {
+            setupPriceCalculation(initialItem);
+        }
     }, 100);
 }
 
@@ -761,7 +1141,8 @@ async function savePrescription() {
                 frequency: item.querySelector('[name="frequency"]').value,
                 days: parseInt(item.querySelector('[name="days"]').value),
                 quantity: parseInt(item.querySelector('[name="quantity"]').value),
-                unit_price: parseFloat(item.querySelector('[name="unitPrice"]').value) || 0
+                unit_price: parseFloat(item.querySelector('[name="unitPrice"]').value) || 0,
+                total_price: parseFloat(item.querySelector('[name="totalPrice"]').value) || 0
             });
         }
     });
@@ -839,7 +1220,7 @@ function addPrescriptionItem() {
     const newItem = document.createElement('div');
     newItem.className = 'row prescription-item';
     newItem.innerHTML = `
-        <div class="col-md-3 mb-2">
+        <div class="col-md-2 mb-2">
             <div class="autocomplete-container">
                 <input type="text" class="form-control" placeholder="药品名称" name="medicineName" autocomplete="off">
                 <div class="autocomplete-dropdown" style="display: none;"></div>
@@ -848,7 +1229,7 @@ function addPrescriptionItem() {
         <div class="col-md-2 mb-2">
             <input type="text" class="form-control" placeholder="规格" name="specification">
         </div>
-        <div class="col-md-1 mb-2">
+        <div class="col-md-2 mb-2">
             <input type="text" class="form-control" placeholder="用法" name="usage">
         </div>
         <div class="col-md-1 mb-2">
@@ -864,6 +1245,9 @@ function addPrescriptionItem() {
             <input type="number" step="0.01" class="form-control" placeholder="单价" name="unitPrice">
         </div>
         <div class="col-md-1 mb-2">
+            <input type="number" step="0.01" class="form-control" placeholder="价格" name="totalPrice" readonly>
+        </div>
+        <div class="col-md-1 mb-2">
             <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionItem(this)">
                 <i class="bi bi-trash"></i>
             </button>
@@ -874,6 +1258,9 @@ function addPrescriptionItem() {
     // 为新添加的药品名称输入框绑定自动完成事件
     const medicineInput = newItem.querySelector('[name="medicineName"]');
     setupMedicineAutocomplete(medicineInput);
+    
+    // 绑定价格自动计算事件
+    setupPriceCalculation(newItem);
 }
 
 function removePrescriptionItem(button) {
@@ -994,33 +1381,72 @@ function viewPrescription(id) {
 
 async function loadPrescriptionDetail(prescriptionId) {
     const content = document.getElementById('prescriptionDetailContent');
+    if (!content) {
+        console.error('找不到处方详情内容容器');
+        return;
+    }
+    
     content.innerHTML = '<div class="text-center text-muted">加载中...</div>';
+    
     try {
-        const response = await fetch(`/api/prescriptions/${prescriptionId}`, { credentials: 'include' });
+        console.log('正在加载处方详情，ID:', prescriptionId); // 调试信息
+        
+        const response = await fetch(`/api/prescriptions/${prescriptionId}`, { 
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        console.log('API响应状态:', response.status); // 调试信息
+        
         if (response.status === 401) {
             content.innerHTML = '<div class="text-danger">请先登录系统</div>';
             return;
         }
+        
+        if (response.status === 404) {
+            content.innerHTML = '<div class="text-danger">处方不存在</div>';
+            return;
+        }
+        
         if (response.ok) {
             const data = await response.json();
+            console.log('API响应数据:', data); // 调试信息
+            
+            if (!data.prescription) {
+                content.innerHTML = '<div class="text-danger">处方数据格式错误</div>';
+                return;
+            }
+            
             const prescription = data.prescription;
             content.innerHTML = renderPrescriptionDetailHtml(prescription);
-            document.getElementById('printPrescriptionBtn').onclick = function() {
-                window.open(`/api/print/prescription/${prescriptionId}`, '_blank');
-            };
+            
+            // 绑定打印按钮事件
+            const printBtn = document.getElementById('printPrescriptionBtn');
+            if (printBtn) {
+                printBtn.onclick = function() {
+                    window.open(`/api/print/prescription/${prescriptionId}`, '_blank');
+                };
+            }
         } else {
-            content.innerHTML = '<div class="text-danger">加载处方详情失败</div>';
+            const errorData = await response.json().catch(() => ({}));
+            console.error('API错误:', response.status, errorData);
+            content.innerHTML = `<div class="text-danger">加载处方详情失败: ${errorData.error || '未知错误'}</div>`;
         }
     } catch (error) {
+        console.error('加载处方详情失败:', error);
         content.innerHTML = '<div class="text-danger">加载处方详情失败，请检查网络连接</div>';
     }
 }
 
 function renderPrescriptionDetailHtml(prescription) {
-    // 生成HTML字符串，结构与 prescription_detail.html 类似
+    // 确保所有数据都有默认值
     let patient = prescription.patient || {};
     let doctor = prescription.doctor || {};
     let items = prescription.items || [];
+    
     return `
     <div>
         <div class="row mb-3">
@@ -1056,18 +1482,30 @@ function renderPrescriptionDetailHtml(prescription) {
                     </thead>
                     <tbody>
                         ${items.length === 0 ? '<tr><td colspan="8" class="text-center text-muted">暂无药品明细</td></tr>' :
-                            items.map(item => `
-                                <tr>
-                                    <td>${item.medicine_name}</td>
-                                    <td>${item.specification}</td>
-                                    <td>${item.usage || '-'}</td>
-                                    <td>${item.frequency || '-'}</td>
-                                    <td>${item.days}</td>
-                                    <td>${item.quantity}</td>
-                                    <td>¥${item.unit_price ? item.unit_price.toFixed(2) : '0.00'}</td>
-                                    <td>¥${item.total_price ? item.total_price.toFixed(2) : '0.00'}</td>
-                                </tr>
-                            `).join('')
+                            items.map(item => {
+                                // 确保所有字段都有默认值
+                                const medicineName = item.medicine_name || '-';
+                                const specification = item.specification || '-';
+                                const usage = item.usage || '-';
+                                const frequency = item.frequency || '-';
+                                const days = item.days || 0;
+                                const quantity = item.quantity || 0;
+                                const unitPrice = item.unit_price || 0;
+                                const totalPrice = item.total_price || 0;
+                                
+                                return `
+                                    <tr>
+                                        <td>${medicineName}</td>
+                                        <td>${specification}</td>
+                                        <td>${usage}</td>
+                                        <td>${frequency}</td>
+                                        <td>${days}</td>
+                                        <td>${quantity}</td>
+                                        <td>¥${unitPrice.toFixed(2)}</td>
+                                        <td>¥${totalPrice.toFixed(2)}</td>
+                                    </tr>
+                                `;
+                            }).join('')
                         }
                     </tbody>
                 </table>
@@ -1266,7 +1704,7 @@ async function loadPrescriptionData(prescriptionId) {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'row prescription-item';
                     itemDiv.innerHTML = `
-                        <div class="col-md-3 mb-2">
+                        <div class="col-md-2 mb-2">
                             <div class="autocomplete-container">
                                 <input type="text" class="form-control" placeholder="药品名称" name="medicineName" value="${item.medicine_name || ''}" autocomplete="off">
                                 <div class="autocomplete-dropdown" style="display: none;"></div>
@@ -1275,7 +1713,7 @@ async function loadPrescriptionData(prescriptionId) {
                         <div class="col-md-2 mb-2">
                             <input type="text" class="form-control" placeholder="规格" name="specification" value="${item.specification || ''}">
                         </div>
-                        <div class="col-md-1 mb-2">
+                        <div class="col-md-2 mb-2">
                             <input type="text" class="form-control" placeholder="用法" name="usage" value="${item.usage || ''}">
                         </div>
                         <div class="col-md-1 mb-2">
@@ -1291,12 +1729,18 @@ async function loadPrescriptionData(prescriptionId) {
                             <input type="number" step="0.01" class="form-control" placeholder="单价" name="unitPrice" value="${item.unit_price || 0}">
                         </div>
                         <div class="col-md-1 mb-2">
+                            <input type="number" step="0.01" class="form-control" placeholder="价格" name="totalPrice" value="${item.total_price || 0}" readonly>
+                        </div>
+                        <div class="col-md-1 mb-2">
                             <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionItem(this)">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
                     `;
                     itemsContainer.appendChild(itemDiv);
+                    
+                    // 为每个药品行绑定价格计算事件
+                    setupPriceCalculation(itemDiv);
                 });
             } else {
                 // 如果没有明细，添加一个空的明细行
@@ -1668,6 +2112,7 @@ function setupMedicineAutocomplete(input) {
         const priceInput = row.querySelector('[name="unitPrice"]');
         const quantityInput = row.querySelector('[name="quantity"]');
         const daysInput = row.querySelector('[name="days"]');
+        const totalPriceInput = row.querySelector('[name="totalPrice"]');
         
         if (specInput) specInput.value = medicine.specification || '';
         if (priceInput) priceInput.value = medicine.price || 0;
@@ -1675,6 +2120,13 @@ function setupMedicineAutocomplete(input) {
         // 设置默认数量为1，天数也为1
         if (quantityInput && !quantityInput.value) quantityInput.value = 1;
         if (daysInput && !daysInput.value) daysInput.value = 1;
+        
+        // 自动计算价格
+        if (totalPriceInput && priceInput && quantityInput) {
+            const quantity = parseInt(quantityInput.value) || 0;
+            const unitPrice = parseFloat(priceInput.value) || 0;
+            totalPriceInput.value = (quantity * unitPrice).toFixed(2);
+        }
         
         // 关闭下拉框
         dropdown.style.display = 'none';
@@ -1755,20 +2207,19 @@ function initMedicineAutocomplete() {
 // 患者自动完成功能
 function setupPatientAutocomplete() {
     const patientNameInput = document.getElementById('prescriptionPatientName');
-    if (!patientNameInput) return;
+    if (!patientNameInput) {
+        return;
+    }
     
     let timeoutId;
     let selectedIndex = -1;
     let patients = [];
     
-    // 创建下拉框
+    // 获取已存在的下拉框
     const container = patientNameInput.parentElement;
-    let dropdown = container.querySelector('.patient-autocomplete-dropdown');
+    const dropdown = container.querySelector('.patient-autocomplete-dropdown');
     if (!dropdown) {
-        dropdown = document.createElement('div');
-        dropdown.className = 'autocomplete-dropdown patient-autocomplete-dropdown';
-        dropdown.style.display = 'none';
-        container.appendChild(dropdown);
+        return;
     }
     
     // 输入事件
@@ -1884,6 +2335,7 @@ function setupPatientAutocomplete() {
                     <div class="autocomplete-item" data-index="${index}">
                         <div class="patient-name">${patient.name}</div>
                         <div class="patient-info">${patient.gender || '未知'} | ${patient.age || '未知'}岁 | ${patient.phone || '无电话'}</div>
+                        ${patient.pinyin ? `<div class="patient-pinyin">拼音: ${patient.pinyin}</div>` : ''}
                     </div>
                 `).join('');
                 
@@ -1901,4 +2353,40 @@ function setupPatientAutocomplete() {
             console.error('搜索患者失败:', error);
         }
     }
+}
+
+// 绑定价格自动计算事件
+function setupPriceCalculation(item) {
+    const quantityInput = item.querySelector('[name="quantity"]');
+    const unitPriceInput = item.querySelector('[name="unitPrice"]');
+    const totalPriceInput = item.querySelector('[name="totalPrice"]');
+    
+    quantityInput.addEventListener('input', function() {
+        const quantity = parseInt(this.value) || 0;
+        const unitPrice = parseFloat(unitPriceInput.value) || 0;
+        totalPriceInput.value = (quantity * unitPrice).toFixed(2);
+    });
+    
+    unitPriceInput.addEventListener('input', function() {
+        const quantity = parseInt(quantityInput.value) || 0;
+        const unitPrice = parseFloat(this.value) || 0;
+        totalPriceInput.value = (quantity * unitPrice).toFixed(2);
+    });
+}
+
+function printPrescriptionDetail() {
+    var printContents = document.querySelector('#prescriptionDetailModal .modal-content').innerHTML;
+    var win = window.open('', '', 'height=800,width=900');
+    win.document.write('<html><head><title>处方打印</title>');
+    win.document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">');
+    win.document.write('<style>body{background:#fff;}@media print{.modal-footer{display:none;}}</style>');
+    win.document.write('</head><body>');
+    win.document.write(printContents);
+    win.document.write('</body></html>');
+    win.document.close();
+    win.focus();
+    setTimeout(function() {
+        win.print();
+        win.close();
+    }, 500);
 } 

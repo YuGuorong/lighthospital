@@ -187,15 +187,15 @@ func initDefaultData() {
 
 	if count == 0 {
 		// 创建默认医生用户
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("doctor123"), bcrypt.DefaultCost)
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("lk123"), bcrypt.DefaultCost)
 		_, err := DB.Exec(`
 			INSERT INTO users (username, password, name, role, created_at, updated_at) 
 			VALUES (?, ?, ?, ?, ?, ?)`,
-			"doctor", string(hashedPassword), "张医生", "doctor", time.Now(), time.Now())
+			"like", string(hashedPassword), "李科", "doctor", time.Now(), time.Now())
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Println("默认医生用户已创建: doctor/doctor123")
+		log.Println("默认医生用户已创建: like/lk123")
 	}
 
 	// 添加一些示例药品

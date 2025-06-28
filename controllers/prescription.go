@@ -281,7 +281,7 @@ func (pc *PrescriptionController) Delete(c *gin.Context) {
 func (pc *PrescriptionController) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	patientID := c.Query("patient_id")
+	search := c.Query("search")
 	status := c.Query("status")
 
 	offset := (page - 1) * limit
@@ -290,9 +290,9 @@ func (pc *PrescriptionController) List(c *gin.Context) {
 	var args []interface{}
 
 	whereClause := "WHERE 1=1"
-	if patientID != "" {
-		whereClause += " AND p.patient_id = ?"
-		args = append(args, patientID)
+	if search != "" {
+		whereClause += " AND pt.name LIKE ?"
+		args = append(args, "%"+search+"%")
 	}
 	if status != "" {
 		whereClause += " AND p.status = ?"

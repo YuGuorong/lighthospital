@@ -178,15 +178,16 @@ function loadPage(page) {
 }
 
 // 加载患者列表
-async function loadPatients() {
+async function loadPatients(page = 1) {
     try {
         const search = document.getElementById('patientSearch').value;
-        const url = search ? `${API_BASE}/patients?search=${encodeURIComponent(search)}` : `${API_BASE}/patients`;
+        const url = search ? `${API_BASE}/patients?search=${encodeURIComponent(search)}&page=${page}&limit=10` : `${API_BASE}/patients?page=${page}&limit=10`;
         
         const response = await fetch(url);
         if (response.ok) {
             const data = await response.json();
             displayPatients(data.patients);
+            displayPatientPagination(data.total, data.page, data.limit);
         }
     } catch (error) {
         console.error('加载患者列表失败:', error);
@@ -217,22 +218,86 @@ function displayPatients(patients) {
     tbody.innerHTML = html;
 }
 
+// 显示患者分页
+function displayPatientPagination(total, currentPage, limit) {
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        // 如果只有一页或没有数据，隐藏分页
+        const paginationContainer = document.getElementById('patientPagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+        return;
+    }
+    
+    let paginationHtml = `
+        <nav aria-label="患者分页">
+            <ul class="pagination justify-content-center">
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPatients(${currentPage - 1})" ${currentPage === 1 ? 'tabindex="-1"' : ''}>上一页</a>
+                </li>
+    `;
+    
+    // 显示页码
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPatients(1)">1</a></li>`;
+        if (startPage > 2) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadPatients(${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPatients(${totalPages})">${totalPages}</a></li>`;
+    }
+    
+    paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPatients(${currentPage + 1})" ${currentPage === totalPages ? 'tabindex="-1"' : ''}>下一页</a>
+                </li>
+            </ul>
+        </nav>
+        <div class="text-center text-muted">
+            共 ${total} 条记录，第 ${currentPage}/${totalPages} 页
+        </div>
+    `;
+    
+    const paginationContainer = document.getElementById('patientPagination');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = paginationHtml;
+    }
+}
+
 // 加载药品列表
-async function loadMedicines() {
+async function loadMedicines(page = 1) {
     try {
         const search = document.getElementById('medicineSearch').value;
         const category = document.getElementById('medicineCategory').value;
         
-        let url = `${API_BASE}/medicines`;
+        let url = `${API_BASE}/medicines?page=${page}&limit=10`;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (category) params.append('category', category);
-        if (params.toString()) url += '?' + params.toString();
+        if (params.toString()) url += '&' + params.toString();
         
         const response = await fetch(url);
         if (response.ok) {
             const data = await response.json();
             displayMedicines(data.medicines);
+            displayMedicinePagination(data.total, data.page, data.limit);
         }
         
         // 加载药品分类
@@ -272,6 +337,69 @@ function displayMedicines(medicines) {
     tbody.innerHTML = html;
 }
 
+// 显示药品分页
+function displayMedicinePagination(total, currentPage, limit) {
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        // 如果只有一页或没有数据，隐藏分页
+        const paginationContainer = document.getElementById('medicinePagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+        return;
+    }
+    
+    let paginationHtml = `
+        <nav aria-label="药品分页">
+            <ul class="pagination justify-content-center">
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadMedicines(${currentPage - 1})" ${currentPage === 1 ? 'tabindex="-1"' : ''}>上一页</a>
+                </li>
+    `;
+    
+    // 显示页码
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadMedicines(1)">1</a></li>`;
+        if (startPage > 2) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadMedicines(${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadMedicines(${totalPages})">${totalPages}</a></li>`;
+    }
+    
+    paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadMedicines(${currentPage + 1})" ${currentPage === totalPages ? 'tabindex="-1"' : ''}>下一页</a>
+                </li>
+            </ul>
+        </nav>
+        <div class="text-center text-muted">
+            共 ${total} 条记录，第 ${currentPage}/${totalPages} 页
+        </div>
+    `;
+    
+    const paginationContainer = document.getElementById('medicinePagination');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = paginationHtml;
+    }
+}
+
 // 加载药品分类
 async function loadMedicineCategories() {
     try {
@@ -297,21 +425,22 @@ async function loadMedicineCategories() {
 }
 
 // 加载处方列表
-async function loadPrescriptions() {
+async function loadPrescriptions(page = 1) {
     try {
         const search = document.getElementById('prescriptionSearch').value;
         const status = document.getElementById('prescriptionStatus').value;
         
-        let url = `${API_BASE}/prescriptions`;
+        let url = `${API_BASE}/prescriptions?page=${page}&limit=10`;
         const params = new URLSearchParams();
         if (search) params.append('search', search);
         if (status) params.append('status', status);
-        if (params.toString()) url += '?' + params.toString();
+        if (params.toString()) url += '&' + params.toString();
         
         const response = await fetch(url);
         if (response.ok) {
             const data = await response.json();
             displayPrescriptions(data.prescriptions);
+            displayPrescriptionPagination(data.total, data.page, data.limit);
         }
     } catch (error) {
         console.error('加载处方列表失败:', error);
@@ -350,6 +479,69 @@ function displayPrescriptions(prescriptions) {
     `).join('');
     
     tbody.innerHTML = html;
+}
+
+// 显示处方分页
+function displayPrescriptionPagination(total, currentPage, limit) {
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        // 如果只有一页或没有数据，隐藏分页
+        const paginationContainer = document.getElementById('prescriptionPagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+        return;
+    }
+    
+    let paginationHtml = `
+        <nav aria-label="处方分页">
+            <ul class="pagination justify-content-center">
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPrescriptions(${currentPage - 1})" ${currentPage === 1 ? 'tabindex="-1"' : ''}>上一页</a>
+                </li>
+    `;
+    
+    // 显示页码
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPrescriptions(1)">1</a></li>`;
+        if (startPage > 2) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadPrescriptions(${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHtml += `<li class="page-item"><a class="page-link" href="#" onclick="loadPrescriptions(${totalPages})">${totalPages}</a></li>`;
+    }
+    
+    paginationHtml += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadPrescriptions(${currentPage + 1})" ${currentPage === totalPages ? 'tabindex="-1"' : ''}>下一页</a>
+                </li>
+            </ul>
+        </nav>
+        <div class="text-center text-muted">
+            共 ${total} 条记录，第 ${currentPage}/${totalPages} 页
+        </div>
+    `;
+    
+    const paginationContainer = document.getElementById('prescriptionPagination');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = paginationHtml;
+    }
 }
 
 // 加载预约列表
@@ -1123,7 +1315,18 @@ async function deletePatient(id) {
     try {
         const response = await fetch(`${API_BASE}/patients/${id}`, { method: 'DELETE' });
         if (response.ok) {
-            loadPatients();
+            // 获取当前页码
+            const currentPage = getCurrentPatientPage();
+            
+            // 重新加载患者列表，保持在当前页面
+            await loadPatients(currentPage);
+            
+            // 检查当前页面是否还有数据，如果没有则回到上一页
+            const tbody = document.getElementById('patientsTable');
+            if (tbody.children.length === 0 && currentPage > 1) {
+                await loadPatients(currentPage - 1);
+            }
+            
             alert('患者删除成功');
         } else {
             const error = await response.json();
@@ -1133,6 +1336,22 @@ async function deletePatient(id) {
         console.error('删除患者失败:', error);
         alert('删除失败，请检查网络连接');
     }
+}
+
+// 获取当前患者页面页码
+function getCurrentPatientPage() {
+    const paginationContainer = document.getElementById('patientPagination');
+    if (paginationContainer) {
+        const activePage = paginationContainer.querySelector('.page-item.active .page-link');
+        if (activePage) {
+            const pageText = activePage.textContent;
+            const page = parseInt(pageText);
+            if (!isNaN(page)) {
+                return page;
+            }
+        }
+    }
+    return 1; // 默认返回第一页
 }
 
 function editMedicine(id) {
@@ -1169,7 +1388,18 @@ async function deleteMedicine(id) {
     try {
         const response = await fetch(`${API_BASE}/medicines/${id}`, { method: 'DELETE' });
         if (response.ok) {
-            loadMedicines();
+            // 获取当前页码
+            const currentPage = getCurrentMedicinePage();
+            
+            // 重新加载药品列表，保持在当前页面
+            await loadMedicines(currentPage);
+            
+            // 检查当前页面是否还有数据，如果没有则回到上一页
+            const tbody = document.getElementById('medicinesTable');
+            if (tbody.children.length === 0 && currentPage > 1) {
+                await loadMedicines(currentPage - 1);
+            }
+            
             alert('药品删除成功');
         } else {
             const error = await response.json();
@@ -1179,6 +1409,22 @@ async function deleteMedicine(id) {
         console.error('删除药品失败:', error);
         alert('删除失败，请检查网络连接');
     }
+}
+
+// 获取当前药品页面页码
+function getCurrentMedicinePage() {
+    const paginationContainer = document.getElementById('medicinePagination');
+    if (paginationContainer) {
+        const activePage = paginationContainer.querySelector('.page-item.active .page-link');
+        if (activePage) {
+            const pageText = activePage.textContent;
+            const page = parseInt(pageText);
+            if (!isNaN(page)) {
+                return page;
+            }
+        }
+    }
+    return 1; // 默认返回第一页
 }
 
 function viewPrescription(id) {
@@ -1352,7 +1598,18 @@ async function deletePrescription(id) {
     try {
         const response = await fetch(`${API_BASE}/prescriptions/${id}`, { method: 'DELETE' });
         if (response.ok) {
-            loadPrescriptions();
+            // 获取当前页码
+            const currentPage = getCurrentPrescriptionPage();
+            
+            // 重新加载处方列表，保持在当前页面
+            await loadPrescriptions(currentPage);
+            
+            // 检查当前页面是否还有数据，如果没有则回到上一页
+            const tbody = document.getElementById('prescriptionsTable');
+            if (tbody.children.length === 0 && currentPage > 1) {
+                await loadPrescriptions(currentPage - 1);
+            }
+            
             alert('处方删除成功');
         } else {
             const error = await response.json();
@@ -1362,6 +1619,22 @@ async function deletePrescription(id) {
         console.error('删除处方失败:', error);
         alert('删除失败，请检查网络连接');
     }
+}
+
+// 获取当前处方页面页码
+function getCurrentPrescriptionPage() {
+    const paginationContainer = document.getElementById('prescriptionPagination');
+    if (paginationContainer) {
+        const activePage = paginationContainer.querySelector('.page-item.active .page-link');
+        if (activePage) {
+            const pageText = activePage.textContent;
+            const page = parseInt(pageText);
+            if (!isNaN(page)) {
+                return page;
+            }
+        }
+    }
+    return 1; // 默认返回第一页
 }
 
 function editAppointment(id) {
