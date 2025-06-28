@@ -6,6 +6,7 @@ require (
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jung-kurt/gofpdf v1.16.2
+	github.com/mozillazg/go-pinyin v0.20.0
 	golang.org/x/crypto v0.38.0
 	modernc.org/sqlite v1.28.0
 )

@@ -648,6 +648,7 @@ function showPrescriptionModal(prescriptionId = null) {
     // 初始化药品自动完成功能
     setTimeout(() => {
         initMedicineAutocomplete();
+        setupPatientAutocomplete();
     }, 100);
 }
 
@@ -1152,6 +1153,7 @@ async function deleteAppointment(id) {
 async function findOrCreatePatient() {
     const patientName = document.getElementById('prescriptionPatientName').value.trim();
     const patientGender = document.getElementById('prescriptionPatientGender').value;
+    const patientAge = document.getElementById('prescriptionPatientAge').value;
     if (!patientName) {
         alert('请输入患者姓名');
         return;
@@ -1166,7 +1168,7 @@ async function findOrCreatePatient() {
             body: JSON.stringify({
                 name: patientName,
                 gender: patientGender,
-                age: 0,
+                age: parseInt(patientAge) || 0,
                 phone: ''
             }),
         });
@@ -1185,9 +1187,12 @@ async function findOrCreatePatient() {
             select.appendChild(option);
             select.value = patient.id;
             
-            // 如果患者有性别信息，更新性别选择框
+            // 更新性别和年龄
             if (patient.gender) {
                 document.getElementById('prescriptionPatientGender').value = patient.gender;
+            }
+            if (patient.age) {
+                document.getElementById('prescriptionPatientAge').value = patient.age;
             }
             
             // 清空输入框
@@ -1301,6 +1306,7 @@ async function loadPrescriptionData(prescriptionId) {
             // 初始化药品自动完成功能
             setTimeout(() => {
                 initMedicineAutocomplete();
+                setupPatientAutocomplete();
             }, 100);
         } else {
             alert('加载处方数据失败');
@@ -1744,4 +1750,155 @@ function initMedicineAutocomplete() {
         }
         setupMedicineAutocomplete(input);
     });
+}
+
+// 患者自动完成功能
+function setupPatientAutocomplete() {
+    const patientNameInput = document.getElementById('prescriptionPatientName');
+    if (!patientNameInput) return;
+    
+    let timeoutId;
+    let selectedIndex = -1;
+    let patients = [];
+    
+    // 创建下拉框
+    const container = patientNameInput.parentElement;
+    let dropdown = container.querySelector('.patient-autocomplete-dropdown');
+    if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'autocomplete-dropdown patient-autocomplete-dropdown';
+        dropdown.style.display = 'none';
+        container.appendChild(dropdown);
+    }
+    
+    // 输入事件
+    patientNameInput.addEventListener('input', function() {
+        clearTimeout(timeoutId);
+        const query = this.value.trim();
+        
+        if (query.length < 1) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        timeoutId = setTimeout(() => {
+            searchPatients(query, dropdown, patientNameInput);
+        }, 300);
+    });
+    
+    // 键盘事件
+    patientNameInput.addEventListener('keydown', function(e) {
+        if (dropdown.style.display === 'none') return;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                selectedIndex = Math.min(selectedIndex + 1, patients.length - 1);
+                updatePatientSelection();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                selectedIndex = Math.max(selectedIndex - 1, -1);
+                updatePatientSelection();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (selectedIndex >= 0 && patients[selectedIndex]) {
+                    selectPatient(patients[selectedIndex]);
+                }
+                break;
+            case 'Escape':
+                dropdown.style.display = 'none';
+                selectedIndex = -1;
+                break;
+        }
+    });
+    
+    // 点击外部关闭下拉框
+    document.addEventListener('click', function(e) {
+        if (!container.contains(e.target)) {
+            dropdown.style.display = 'none';
+            selectedIndex = -1;
+        }
+    });
+    
+    function updatePatientSelection() {
+        const items = dropdown.querySelectorAll('.autocomplete-item');
+        items.forEach((item, index) => {
+            if (index === selectedIndex) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+    
+    function selectPatient(patient) {
+        // 填充患者信息
+        document.getElementById('prescriptionPatientName').value = patient.name;
+        
+        // 更新患者选择框
+        const select = document.getElementById('prescriptionPatient');
+        select.innerHTML = '<option value="">请选择患者</option>';
+        
+        const option = document.createElement('option');
+        option.value = patient.id;
+        option.textContent = `${patient.name} (${patient.gender || '未知'}, ${patient.age || '未知'}岁)`;
+        select.appendChild(option);
+        select.value = patient.id;
+        
+        // 更新性别和年龄
+        if (patient.gender) {
+            document.getElementById('prescriptionPatientGender').value = patient.gender;
+        }
+        if (patient.age) {
+            document.getElementById('prescriptionPatientAge').value = patient.age;
+        }
+        
+        // 关闭下拉框
+        dropdown.style.display = 'none';
+        selectedIndex = -1;
+        
+        // 视觉反馈
+        patientNameInput.style.backgroundColor = '#e8f5e8';
+        setTimeout(() => {
+            patientNameInput.style.backgroundColor = '';
+        }, 500);
+    }
+    
+    // 搜索患者
+    async function searchPatients(query, dropdown, input) {
+        try {
+            const response = await fetch(`${API_BASE}/patients?search=${encodeURIComponent(query)}`);
+            if (response.ok) {
+                const data = await response.json();
+                patients = data.patients || [];
+                
+                if (patients.length === 0) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+                
+                // 生成下拉框内容
+                dropdown.innerHTML = patients.map((patient, index) => `
+                    <div class="autocomplete-item" data-index="${index}">
+                        <div class="patient-name">${patient.name}</div>
+                        <div class="patient-info">${patient.gender || '未知'} | ${patient.age || '未知'}岁 | ${patient.phone || '无电话'}</div>
+                    </div>
+                `).join('');
+                
+                // 绑定点击事件
+                dropdown.querySelectorAll('.autocomplete-item').forEach((item, index) => {
+                    item.addEventListener('click', function() {
+                        selectPatient(patients[index]);
+                    });
+                });
+                
+                dropdown.style.display = 'block';
+                selectedIndex = -1;
+            }
+        } catch (error) {
+            console.error('搜索患者失败:', error);
+        }
+    }
 } 

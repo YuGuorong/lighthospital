@@ -1,6 +1,6 @@
 // 全局变量
 let currentUser = null;
-let currentPage = 'dashboard';
+let currentPage = 'prescriptions';
 
 // API基础URL
 const API_BASE = '/api';
@@ -19,7 +19,7 @@ function initApp() {
     bindEvents();
     
     // 加载页面内容
-    loadPage('dashboard');
+    loadPage('prescriptions');
 }
 
 // 检查认证状态
@@ -102,7 +102,7 @@ async function handleLogin(e) {
             const data = await response.json();
             currentUser = data.user;
             showMainApp();
-            loadPage('dashboard');
+            loadPage('prescriptions');
         } else {
             const error = await response.json();
             alert(error.error || '登录失败');
@@ -145,7 +145,6 @@ function loadPage(page) {
     
     // 更新页面标题
     const titles = {
-        dashboard: '仪表板',
         patients: '患者管理',
         medicines: '药品管理',
         prescriptions: '处方管理',
@@ -157,9 +156,6 @@ function loadPage(page) {
     
     // 加载页面数据
     switch (page) {
-        case 'dashboard':
-            loadDashboard();
-            break;
         case 'patients':
             loadPatients();
             break;
@@ -179,92 +175,6 @@ function loadPage(page) {
             loadDoctors();
             break;
     }
-}
-
-// 加载仪表板
-async function loadDashboard() {
-    try {
-        // 加载统计数据
-        const [patientsRes, medicinesRes, prescriptionsRes, appointmentsRes] = await Promise.all([
-            fetch(`${API_BASE}/patients?limit=1`),
-            fetch(`${API_BASE}/medicines?limit=1`),
-            fetch(`${API_BASE}/prescriptions?limit=1`),
-            fetch(`${API_BASE}/appointments/today`)
-        ]);
-        
-        if (patientsRes.ok) {
-            const data = await patientsRes.json();
-            document.getElementById('patientCount').textContent = data.total;
-        }
-        
-        if (medicinesRes.ok) {
-            const data = await medicinesRes.json();
-            document.getElementById('medicineCount').textContent = data.total;
-        }
-        
-        if (prescriptionsRes.ok) {
-            const data = await prescriptionsRes.json();
-            document.getElementById('prescriptionCount').textContent = data.total;
-        }
-        
-        if (appointmentsRes.ok) {
-            const data = await appointmentsRes.json();
-            document.getElementById('appointmentCount').textContent = data.appointments.length;
-            displayTodayAppointments(data.appointments);
-        }
-        
-        // 加载低库存药品
-        const lowStockRes = await fetch(`${API_BASE}/medicines/low-stock`);
-        if (lowStockRes.ok) {
-            const data = await lowStockRes.json();
-            displayLowStockMedicines(data.medicines);
-        }
-        
-    } catch (error) {
-        console.error('加载仪表板失败:', error);
-    }
-}
-
-// 显示今日预约
-function displayTodayAppointments(appointments) {
-    const container = document.getElementById('todayAppointments');
-    if (appointments.length === 0) {
-        container.innerHTML = '<p class="text-muted">今日无预约</p>';
-        return;
-    }
-    
-    const html = appointments.map(apt => `
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
-                <strong>${apt.patient.name}</strong>
-                <br><small class="text-muted">${apt.appointment_time}</small>
-            </div>
-            <span class="badge bg-primary">${apt.status}</span>
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
-}
-
-// 显示低库存药品
-function displayLowStockMedicines(medicines) {
-    const container = document.getElementById('lowStockMedicines');
-    if (medicines.length === 0) {
-        container.innerHTML = '<p class="text-muted">无低库存药品</p>';
-        return;
-    }
-    
-    const html = medicines.map(med => `
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
-                <strong>${med.name}</strong>
-                <br><small class="text-muted">库存: ${med.stock}</small>
-            </div>
-            <span class="badge bg-warning">低库存</span>
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
 }
 
 // 加载患者列表
@@ -606,7 +516,7 @@ function showPrescriptionModal(prescriptionId = null) {
         // 重置处方明细
         document.getElementById('prescriptionItems').innerHTML = `
             <div class="row prescription-item">
-                <div class="col-md-3 mb-2">
+                <div class="col-md-2 mb-2">
                     <div class="autocomplete-container">
                         <input type="text" class="form-control" placeholder="药品名称" name="medicineName" autocomplete="off">
                         <div class="autocomplete-dropdown" style="display: none;"></div>
@@ -615,7 +525,7 @@ function showPrescriptionModal(prescriptionId = null) {
                 <div class="col-md-2 mb-2">
                     <input type="text" class="form-control" placeholder="规格" name="specification">
                 </div>
-                <div class="col-md-1 mb-2">
+                <div class="col-md-2 mb-2">
                     <input type="text" class="form-control" placeholder="用法" name="usage">
                 </div>
                 <div class="col-md-1 mb-2">
@@ -629,6 +539,9 @@ function showPrescriptionModal(prescriptionId = null) {
                 </div>
                 <div class="col-md-1 mb-2">
                     <input type="number" step="0.01" class="form-control" placeholder="单价" name="unitPrice">
+                </div>
+                <div class="col-md-1 mb-2">
+                    <input type="number" step="0.01" class="form-control" placeholder="价格" name="totalPrice" readonly>
                 </div>
                 <div class="col-md-1 mb-2">
                     <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionItem(this)">
@@ -648,6 +561,12 @@ function showPrescriptionModal(prescriptionId = null) {
     // 初始化药品自动完成功能
     setTimeout(() => {
         initMedicineAutocomplete();
+        setupPatientAutocomplete();
+        // 为初始药品行绑定价格计算事件
+        const initialItem = document.querySelector('.prescription-item');
+        if (initialItem) {
+            setupPriceCalculation(initialItem);
+        }
     }, 100);
 }
 
@@ -760,7 +679,8 @@ async function savePrescription() {
                 frequency: item.querySelector('[name="frequency"]').value,
                 days: parseInt(item.querySelector('[name="days"]').value),
                 quantity: parseInt(item.querySelector('[name="quantity"]').value),
-                unit_price: parseFloat(item.querySelector('[name="unitPrice"]').value) || 0
+                unit_price: parseFloat(item.querySelector('[name="unitPrice"]').value) || 0,
+                total_price: parseFloat(item.querySelector('[name="totalPrice"]').value) || 0
             });
         }
     });
@@ -838,7 +758,7 @@ function addPrescriptionItem() {
     const newItem = document.createElement('div');
     newItem.className = 'row prescription-item';
     newItem.innerHTML = `
-        <div class="col-md-3 mb-2">
+        <div class="col-md-2 mb-2">
             <div class="autocomplete-container">
                 <input type="text" class="form-control" placeholder="药品名称" name="medicineName" autocomplete="off">
                 <div class="autocomplete-dropdown" style="display: none;"></div>
@@ -847,7 +767,7 @@ function addPrescriptionItem() {
         <div class="col-md-2 mb-2">
             <input type="text" class="form-control" placeholder="规格" name="specification">
         </div>
-        <div class="col-md-1 mb-2">
+        <div class="col-md-2 mb-2">
             <input type="text" class="form-control" placeholder="用法" name="usage">
         </div>
         <div class="col-md-1 mb-2">
@@ -863,6 +783,9 @@ function addPrescriptionItem() {
             <input type="number" step="0.01" class="form-control" placeholder="单价" name="unitPrice">
         </div>
         <div class="col-md-1 mb-2">
+            <input type="number" step="0.01" class="form-control" placeholder="价格" name="totalPrice" readonly>
+        </div>
+        <div class="col-md-1 mb-2">
             <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionItem(this)">
                 <i class="bi bi-trash"></i>
             </button>
@@ -873,6 +796,9 @@ function addPrescriptionItem() {
     // 为新添加的药品名称输入框绑定自动完成事件
     const medicineInput = newItem.querySelector('[name="medicineName"]');
     setupMedicineAutocomplete(medicineInput);
+    
+    // 绑定价格自动计算事件
+    setupPriceCalculation(newItem);
 }
 
 function removePrescriptionItem(button) {
@@ -1152,6 +1078,7 @@ async function deleteAppointment(id) {
 async function findOrCreatePatient() {
     const patientName = document.getElementById('prescriptionPatientName').value.trim();
     const patientGender = document.getElementById('prescriptionPatientGender').value;
+    const patientAge = document.getElementById('prescriptionPatientAge').value;
     if (!patientName) {
         alert('请输入患者姓名');
         return;
@@ -1166,7 +1093,7 @@ async function findOrCreatePatient() {
             body: JSON.stringify({
                 name: patientName,
                 gender: patientGender,
-                age: 0,
+                age: parseInt(patientAge) || 0,
                 phone: ''
             }),
         });
@@ -1185,9 +1112,12 @@ async function findOrCreatePatient() {
             select.appendChild(option);
             select.value = patient.id;
             
-            // 如果患者有性别信息，更新性别选择框
+            // 更新性别和年龄
             if (patient.gender) {
                 document.getElementById('prescriptionPatientGender').value = patient.gender;
+            }
+            if (patient.age) {
+                document.getElementById('prescriptionPatientAge').value = patient.age;
             }
             
             // 清空输入框
@@ -1261,7 +1191,7 @@ async function loadPrescriptionData(prescriptionId) {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'row prescription-item';
                     itemDiv.innerHTML = `
-                        <div class="col-md-3 mb-2">
+                        <div class="col-md-2 mb-2">
                             <div class="autocomplete-container">
                                 <input type="text" class="form-control" placeholder="药品名称" name="medicineName" value="${item.medicine_name || ''}" autocomplete="off">
                                 <div class="autocomplete-dropdown" style="display: none;"></div>
@@ -1270,7 +1200,7 @@ async function loadPrescriptionData(prescriptionId) {
                         <div class="col-md-2 mb-2">
                             <input type="text" class="form-control" placeholder="规格" name="specification" value="${item.specification || ''}">
                         </div>
-                        <div class="col-md-1 mb-2">
+                        <div class="col-md-2 mb-2">
                             <input type="text" class="form-control" placeholder="用法" name="usage" value="${item.usage || ''}">
                         </div>
                         <div class="col-md-1 mb-2">
@@ -1286,12 +1216,18 @@ async function loadPrescriptionData(prescriptionId) {
                             <input type="number" step="0.01" class="form-control" placeholder="单价" name="unitPrice" value="${item.unit_price || 0}">
                         </div>
                         <div class="col-md-1 mb-2">
+                            <input type="number" step="0.01" class="form-control" placeholder="价格" name="totalPrice" value="${item.total_price || 0}" readonly>
+                        </div>
+                        <div class="col-md-1 mb-2">
                             <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionItem(this)">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
                     `;
                     itemsContainer.appendChild(itemDiv);
+                    
+                    // 为每个药品行绑定价格计算事件
+                    setupPriceCalculation(itemDiv);
                 });
             } else {
                 // 如果没有明细，添加一个空的明细行
@@ -1301,6 +1237,7 @@ async function loadPrescriptionData(prescriptionId) {
             // 初始化药品自动完成功能
             setTimeout(() => {
                 initMedicineAutocomplete();
+                setupPatientAutocomplete();
             }, 100);
         } else {
             alert('加载处方数据失败');
@@ -1662,6 +1599,7 @@ function setupMedicineAutocomplete(input) {
         const priceInput = row.querySelector('[name="unitPrice"]');
         const quantityInput = row.querySelector('[name="quantity"]');
         const daysInput = row.querySelector('[name="days"]');
+        const totalPriceInput = row.querySelector('[name="totalPrice"]');
         
         if (specInput) specInput.value = medicine.specification || '';
         if (priceInput) priceInput.value = medicine.price || 0;
@@ -1669,6 +1607,13 @@ function setupMedicineAutocomplete(input) {
         // 设置默认数量为1，天数也为1
         if (quantityInput && !quantityInput.value) quantityInput.value = 1;
         if (daysInput && !daysInput.value) daysInput.value = 1;
+        
+        // 自动计算价格
+        if (totalPriceInput && priceInput && quantityInput) {
+            const quantity = parseInt(quantityInput.value) || 0;
+            const unitPrice = parseFloat(priceInput.value) || 0;
+            totalPriceInput.value = (quantity * unitPrice).toFixed(2);
+        }
         
         // 关闭下拉框
         dropdown.style.display = 'none';
@@ -1743,5 +1688,175 @@ function initMedicineAutocomplete() {
             container.appendChild(dropdown);
         }
         setupMedicineAutocomplete(input);
+    });
+}
+
+// 患者自动完成功能
+function setupPatientAutocomplete() {
+    const patientNameInput = document.getElementById('prescriptionPatientName');
+    if (!patientNameInput) {
+        return;
+    }
+    
+    let timeoutId;
+    let selectedIndex = -1;
+    let patients = [];
+    
+    // 获取已存在的下拉框
+    const container = patientNameInput.parentElement;
+    const dropdown = container.querySelector('.patient-autocomplete-dropdown');
+    if (!dropdown) {
+        return;
+    }
+    
+    // 输入事件
+    patientNameInput.addEventListener('input', function() {
+        clearTimeout(timeoutId);
+        const query = this.value.trim();
+        
+        if (query.length < 1) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        timeoutId = setTimeout(() => {
+            searchPatients(query, dropdown, patientNameInput);
+        }, 300);
+    });
+    
+    // 键盘事件
+    patientNameInput.addEventListener('keydown', function(e) {
+        if (dropdown.style.display === 'none') return;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                selectedIndex = Math.min(selectedIndex + 1, patients.length - 1);
+                updatePatientSelection();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                selectedIndex = Math.max(selectedIndex - 1, -1);
+                updatePatientSelection();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (selectedIndex >= 0 && patients[selectedIndex]) {
+                    selectPatient(patients[selectedIndex]);
+                }
+                break;
+            case 'Escape':
+                dropdown.style.display = 'none';
+                selectedIndex = -1;
+                break;
+        }
+    });
+    
+    // 点击外部关闭下拉框
+    document.addEventListener('click', function(e) {
+        if (!container.contains(e.target)) {
+            dropdown.style.display = 'none';
+            selectedIndex = -1;
+        }
+    });
+    
+    function updatePatientSelection() {
+        const items = dropdown.querySelectorAll('.autocomplete-item');
+        items.forEach((item, index) => {
+            if (index === selectedIndex) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+    
+    function selectPatient(patient) {
+        // 填充患者信息
+        document.getElementById('prescriptionPatientName').value = patient.name;
+        
+        // 更新患者选择框
+        const select = document.getElementById('prescriptionPatient');
+        select.innerHTML = '<option value="">请选择患者</option>';
+        
+        const option = document.createElement('option');
+        option.value = patient.id;
+        option.textContent = `${patient.name} (${patient.gender || '未知'}, ${patient.age || '未知'}岁)`;
+        select.appendChild(option);
+        select.value = patient.id;
+        
+        // 更新性别和年龄
+        if (patient.gender) {
+            document.getElementById('prescriptionPatientGender').value = patient.gender;
+        }
+        if (patient.age) {
+            document.getElementById('prescriptionPatientAge').value = patient.age;
+        }
+        
+        // 关闭下拉框
+        dropdown.style.display = 'none';
+        selectedIndex = -1;
+        
+        // 视觉反馈
+        patientNameInput.style.backgroundColor = '#e8f5e8';
+        setTimeout(() => {
+            patientNameInput.style.backgroundColor = '';
+        }, 500);
+    }
+    
+    // 搜索患者
+    async function searchPatients(query, dropdown, input) {
+        try {
+            const response = await fetch(`${API_BASE}/patients?search=${encodeURIComponent(query)}`);
+            if (response.ok) {
+                const data = await response.json();
+                patients = data.patients || [];
+                
+                if (patients.length === 0) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+                
+                // 生成下拉框内容
+                dropdown.innerHTML = patients.map((patient, index) => `
+                    <div class="autocomplete-item" data-index="${index}">
+                        <div class="patient-name">${patient.name}</div>
+                        <div class="patient-info">${patient.gender || '未知'} | ${patient.age || '未知'}岁 | ${patient.phone || '无电话'}</div>
+                        ${patient.pinyin ? `<div class="patient-pinyin">拼音: ${patient.pinyin}</div>` : ''}
+                    </div>
+                `).join('');
+                
+                // 绑定点击事件
+                dropdown.querySelectorAll('.autocomplete-item').forEach((item, index) => {
+                    item.addEventListener('click', function() {
+                        selectPatient(patients[index]);
+                    });
+                });
+                
+                dropdown.style.display = 'block';
+                selectedIndex = -1;
+            }
+        } catch (error) {
+            console.error('搜索患者失败:', error);
+        }
+    }
+}
+
+// 绑定价格自动计算事件
+function setupPriceCalculation(item) {
+    const quantityInput = item.querySelector('[name="quantity"]');
+    const unitPriceInput = item.querySelector('[name="unitPrice"]');
+    const totalPriceInput = item.querySelector('[name="totalPrice"]');
+    
+    quantityInput.addEventListener('input', function() {
+        const quantity = parseInt(this.value) || 0;
+        const unitPrice = parseFloat(unitPriceInput.value) || 0;
+        totalPriceInput.value = (quantity * unitPrice).toFixed(2);
+    });
+    
+    unitPriceInput.addEventListener('input', function() {
+        const quantity = parseInt(quantityInput.value) || 0;
+        const unitPrice = parseFloat(this.value) || 0;
+        totalPriceInput.value = (quantity * unitPrice).toFixed(2);
     });
 } 

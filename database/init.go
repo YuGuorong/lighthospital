@@ -46,6 +46,7 @@ func createTables() {
 	CREATE TABLE IF NOT EXISTS patients (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
+		pinyin TEXT,
 		gender TEXT NOT NULL,
 		age INTEGER NOT NULL,
 		phone TEXT,
@@ -252,5 +253,27 @@ func migrateDatabase() {
 		}
 	} else {
 		log.Println("doctor_advice字段已存在")
+	}
+
+	// 检查patients表是否有pinyin字段
+	err = DB.QueryRow(`
+		SELECT COUNT(*) FROM pragma_table_info('patients') 
+		WHERE name = 'pinyin'`).Scan(&count)
+
+	if err != nil {
+		log.Printf("检查pinyin字段失败: %v", err)
+		return
+	}
+
+	// 如果字段不存在，则添加
+	if count == 0 {
+		_, err := DB.Exec(`ALTER TABLE patients ADD COLUMN pinyin TEXT;`)
+		if err != nil {
+			log.Printf("添加pinyin字段失败: %v", err)
+		} else {
+			log.Println("patients表已添加pinyin字段")
+		}
+	} else {
+		log.Println("pinyin字段已存在")
 	}
 }

@@ -5,9 +5,11 @@ import (
 	"lighthospital/models"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mozillazg/go-pinyin"
 )
 
 type MedicineController struct{}
@@ -289,12 +291,11 @@ func (mc *MedicineController) AutoComplete(c *gin.Context) {
 		return
 	}
 
+	// 获取所有药品进行本地搜索
 	rows, err := database.DB.Query(`
 		SELECT id, name, specification, unit, price, stock
 		FROM medicines 
-		WHERE name LIKE ? OR specification LIKE ?
-		ORDER BY name ASC 
-		LIMIT 10`, "%"+query+"%", "%"+query+"%")
+		ORDER BY name ASC`)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "搜索药品失败"})
@@ -302,7 +303,7 @@ func (mc *MedicineController) AutoComplete(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var medicines []map[string]interface{}
+	var allMedicines []map[string]interface{}
 	for rows.Next() {
 		var id int
 		var name, specification, unit string
@@ -314,7 +315,7 @@ func (mc *MedicineController) AutoComplete(c *gin.Context) {
 			continue
 		}
 
-		medicines = append(medicines, map[string]interface{}{
+		allMedicines = append(allMedicines, map[string]interface{}{
 			"id":            id,
 			"name":          name,
 			"specification": specification,
@@ -324,5 +325,80 @@ func (mc *MedicineController) AutoComplete(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"medicines": medicines})
+	// 本地搜索，支持拼音和英文
+	var matchedMedicines []map[string]interface{}
+	queryLower := strings.ToLower(query)
+
+	for _, medicine := range allMedicines {
+		name := medicine["name"].(string)
+		specification := medicine["specification"].(string)
+
+		// 直接匹配（中文、英文）
+		if strings.Contains(strings.ToLower(name), queryLower) ||
+			strings.Contains(strings.ToLower(specification), queryLower) {
+			matchedMedicines = append(matchedMedicines, medicine)
+			continue
+		}
+
+		// 拼音匹配
+		namePinyin := getPinyin(name)
+		specPinyin := getPinyin(specification)
+
+		if strings.Contains(strings.ToLower(namePinyin), queryLower) ||
+			strings.Contains(strings.ToLower(specPinyin), queryLower) {
+			matchedMedicines = append(matchedMedicines, medicine)
+			continue
+		}
+
+		// 首字母匹配
+		nameInitials := getInitials(name)
+		specInitials := getInitials(specification)
+
+		if strings.Contains(strings.ToLower(nameInitials), queryLower) ||
+			strings.Contains(strings.ToLower(specInitials), queryLower) {
+			matchedMedicines = append(matchedMedicines, medicine)
+		}
+	}
+
+	// 限制结果数量
+	if len(matchedMedicines) > 10 {
+		matchedMedicines = matchedMedicines[:10]
+	}
+
+	c.JSON(http.StatusOK, gin.H{"medicines": matchedMedicines})
+}
+
+// 获取拼音
+func getPinyin(text string) string {
+	args := pinyin.NewArgs()
+	args.Style = pinyin.Normal
+	args.Separator = ""
+
+	pinyinSlice := pinyin.Pinyin(text, args)
+	var result strings.Builder
+
+	for _, p := range pinyinSlice {
+		if len(p) > 0 {
+			result.WriteString(p[0])
+		}
+	}
+
+	return result.String()
+}
+
+// 获取首字母
+func getInitials(text string) string {
+	args := pinyin.NewArgs()
+	args.Style = pinyin.FirstLetter
+
+	pinyinSlice := pinyin.Pinyin(text, args)
+	var result strings.Builder
+
+	for _, p := range pinyinSlice {
+		if len(p) > 0 {
+			result.WriteString(p[0])
+		}
+	}
+
+	return result.String()
 }

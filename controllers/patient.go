@@ -5,9 +5,11 @@ import (
 	"lighthospital/models"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mozillazg/go-pinyin"
 )
 
 type PatientController struct{}
@@ -19,11 +21,14 @@ func (pc *PatientController) Create(c *gin.Context) {
 		return
 	}
 
+	// 生成拼音
+	pinyin := generatePinyin(patient.Name)
+
 	now := time.Now()
 	result, err := database.DB.Exec(`
-		INSERT INTO patients (name, gender, age, phone, address, id_card, medical_history, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		patient.Name, patient.Gender, patient.Age, patient.Phone, patient.Address,
+		INSERT INTO patients (name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		patient.Name, pinyin, patient.Gender, patient.Age, patient.Phone, patient.Address,
 		patient.IDCard, patient.MedicalHistory, now, now)
 
 	if err != nil {
@@ -47,9 +52,9 @@ func (pc *PatientController) Get(c *gin.Context) {
 
 	var patient models.Patient
 	err = database.DB.QueryRow(`
-		SELECT id, name, gender, age, phone, address, id_card, medical_history, created_at, updated_at
+		SELECT id, name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at
 		FROM patients WHERE id = ?`, id).Scan(
-		&patient.ID, &patient.Name, &patient.Gender, &patient.Age, &patient.Phone,
+		&patient.ID, &patient.Name, &patient.Pinyin, &patient.Gender, &patient.Age, &patient.Phone,
 		&patient.Address, &patient.IDCard, &patient.MedicalHistory, &patient.CreatedAt, &patient.UpdatedAt)
 
 	if err != nil {
@@ -73,10 +78,13 @@ func (pc *PatientController) Update(c *gin.Context) {
 		return
 	}
 
+	// 生成拼音
+	pinyin := generatePinyin(patient.Name)
+
 	_, err = database.DB.Exec(`
-		UPDATE patients SET name = ?, gender = ?, age = ?, phone = ?, address = ?, 
+		UPDATE patients SET name = ?, pinyin = ?, gender = ?, age = ?, phone = ?, address = ?, 
 		id_card = ?, medical_history = ?, updated_at = ? WHERE id = ?`,
-		patient.Name, patient.Gender, patient.Age, patient.Phone, patient.Address,
+		patient.Name, pinyin, patient.Gender, patient.Age, patient.Phone, patient.Address,
 		patient.IDCard, patient.MedicalHistory, time.Now(), id)
 
 	if err != nil {
@@ -115,14 +123,14 @@ func (pc *PatientController) List(c *gin.Context) {
 
 	if search != "" {
 		query = `
-			SELECT id, name, gender, age, phone, address, id_card, medical_history, created_at, updated_at
+			SELECT id, name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at
 			FROM patients 
-			WHERE name LIKE ? OR phone LIKE ? OR id_card LIKE ?
+			WHERE name LIKE ? OR pinyin LIKE ? OR phone LIKE ? OR id_card LIKE ?
 			ORDER BY created_at DESC LIMIT ? OFFSET ?`
-		args = []interface{}{"%" + search + "%", "%" + search + "%", "%" + search + "%", limit, offset}
+		args = []interface{}{"%" + search + "%", "%" + search + "%", "%" + search + "%", "%" + search + "%", limit, offset}
 	} else {
 		query = `
-			SELECT id, name, gender, age, phone, address, id_card, medical_history, created_at, updated_at
+			SELECT id, name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at
 			FROM patients 
 			ORDER BY created_at DESC LIMIT ? OFFSET ?`
 		args = []interface{}{limit, offset}
@@ -139,7 +147,7 @@ func (pc *PatientController) List(c *gin.Context) {
 	for rows.Next() {
 		var patient models.Patient
 		err := rows.Scan(
-			&patient.ID, &patient.Name, &patient.Gender, &patient.Age, &patient.Phone,
+			&patient.ID, &patient.Name, &patient.Pinyin, &patient.Gender, &patient.Age, &patient.Phone,
 			&patient.Address, &patient.IDCard, &patient.MedicalHistory, &patient.CreatedAt, &patient.UpdatedAt)
 		if err != nil {
 			continue
@@ -150,8 +158,8 @@ func (pc *PatientController) List(c *gin.Context) {
 	// 获取总数
 	var total int
 	if search != "" {
-		database.DB.QueryRow("SELECT COUNT(*) FROM patients WHERE name LIKE ? OR phone LIKE ? OR id_card LIKE ?",
-			"%"+search+"%", "%"+search+"%", "%"+search+"%").Scan(&total)
+		database.DB.QueryRow("SELECT COUNT(*) FROM patients WHERE name LIKE ? OR pinyin LIKE ? OR phone LIKE ? OR id_card LIKE ?",
+			"%"+search+"%", "%"+search+"%", "%"+search+"%", "%"+search+"%").Scan(&total)
 	} else {
 		database.DB.QueryRow("SELECT COUNT(*) FROM patients").Scan(&total)
 	}
@@ -172,13 +180,13 @@ func (pc *PatientController) Search(c *gin.Context) {
 	}
 
 	query := `
-		SELECT id, name, gender, age, phone, address, id_card, medical_history, created_at, updated_at
+		SELECT id, name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at
 		FROM patients WHERE 1=1`
 	var args []interface{}
 
 	if search.Name != "" {
-		query += " AND name LIKE ?"
-		args = append(args, "%"+search.Name+"%")
+		query += " AND (name LIKE ? OR pinyin LIKE ?)"
+		args = append(args, "%"+search.Name+"%", "%"+search.Name+"%")
 	}
 	if search.Phone != "" {
 		query += " AND phone LIKE ?"
@@ -202,7 +210,7 @@ func (pc *PatientController) Search(c *gin.Context) {
 	for rows.Next() {
 		var patient models.Patient
 		err := rows.Scan(
-			&patient.ID, &patient.Name, &patient.Gender, &patient.Age, &patient.Phone,
+			&patient.ID, &patient.Name, &patient.Pinyin, &patient.Gender, &patient.Age, &patient.Phone,
 			&patient.Address, &patient.IDCard, &patient.MedicalHistory, &patient.CreatedAt, &patient.UpdatedAt)
 		if err != nil {
 			continue
@@ -230,9 +238,9 @@ func (pc *PatientController) FindOrCreateByName(c *gin.Context) {
 	// 先查找是否存在同名患者
 	var patient models.Patient
 	err := database.DB.QueryRow(`
-		SELECT id, name, gender, age, phone, address, id_card, medical_history, created_at, updated_at
+		SELECT id, name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at
 		FROM patients WHERE name = ?`, request.Name).Scan(
-		&patient.ID, &patient.Name, &patient.Gender, &patient.Age, &patient.Phone,
+		&patient.ID, &patient.Name, &patient.Pinyin, &patient.Gender, &patient.Age, &patient.Phone,
 		&patient.Address, &patient.IDCard, &patient.MedicalHistory, &patient.CreatedAt, &patient.UpdatedAt)
 
 	if err == nil {
@@ -246,11 +254,12 @@ func (pc *PatientController) FindOrCreateByName(c *gin.Context) {
 	}
 
 	// 患者不存在，创建新患者
+	pinyin := generatePinyin(request.Name)
 	now := time.Now()
 	result, err := database.DB.Exec(`
-		INSERT INTO patients (name, gender, age, phone, address, id_card, medical_history, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		request.Name, request.Gender, request.Age, request.Phone, "", "", "", now, now)
+		INSERT INTO patients (name, pinyin, gender, age, phone, address, id_card, medical_history, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		request.Name, pinyin, request.Gender, request.Age, request.Phone, "", "", "", now, now)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建患者失败"})
@@ -263,6 +272,7 @@ func (pc *PatientController) FindOrCreateByName(c *gin.Context) {
 	newPatient := models.Patient{
 		ID:        int(id),
 		Name:      request.Name,
+		Pinyin:    pinyin,
 		Gender:    request.Gender,
 		Age:       request.Age,
 		Phone:     request.Phone,
@@ -275,4 +285,18 @@ func (pc *PatientController) FindOrCreateByName(c *gin.Context) {
 		"created": true,
 		"message": "患者创建成功",
 	})
+}
+
+func generatePinyin(name string) string {
+	p := pinyin.NewArgs()
+	p.Style = pinyin.Normal
+	pinyinArray := pinyin.Pinyin(name, p)
+
+	var result []string
+	for _, chars := range pinyinArray {
+		if len(chars) > 0 {
+			result = append(result, chars[0])
+		}
+	}
+	return strings.Join(result, "")
 }
